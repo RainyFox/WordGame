@@ -6,25 +6,26 @@ using UnityEngine;
 public class GameManager : MonoBehaviour
 {
     #region SerializeField
+    [SerializeField] GameObject levelSelectPanel;
+    [SerializeField] TMP_InputField rangeMin;
+    [SerializeField] TMP_InputField rangeMax;
     [SerializeField] GameObject gamePanel;
     [SerializeField] TextMeshProUGUI questionText;
     [SerializeField] TextMeshProUGUI spell;
     [SerializeField] TextMeshProUGUI translate;
     [SerializeField] TextMeshProUGUI example;
-    [SerializeField] TMP_InputField input;
+    [SerializeField] TMP_InputField textInput;
     #endregion
     SimpleDB db = new();
     bool readyToNext = false;
     bool waitingForRelease = false;
     int next = 0;
+    int round = 1;
     DataTable table;
     void Start()
     {
-        int from = 1;
-        int to = 43;
-        table = ReadWordsInRange(from, to, 43);
-        ShowAnswer(false);
-        LoadNextWord();
+        
+     
     }
 
     void Update()
@@ -32,25 +33,38 @@ public class GameManager : MonoBehaviour
         DetectEnter();
     }
 
+    public void GameStart(int type)
+    {
+        int rangeMinNumber, rangeMaxNumber;
+        if (!TryParseAndValidateRange(out rangeMinNumber, out rangeMaxNumber))
+            return;
+        string tableName = GetTableName(type);
+        table = ReadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
+        if (table.Rows.Count == 0)
+            return;
+        ShowAnswer(false);
+        LoadNextWord();
+        levelSelectPanel.SetActive(false);
+        gamePanel.SetActive(true);
+    }
     public void OnTextSubmit(string text)
     {
-        if (input.text == spell.text)
+        if (textInput.text == spell.text)
         {
             ShowAnswer(true);
             readyToNext = true;
             waitingForRelease = true;
         }
-        input.text = "";
-        input.ActivateInputField();
+        textInput.text = "";
+        textInput.ActivateInputField();
     }
-    DataTable ReadWordsInRange(int from, int to, int quantity)
+    DataTable ReadWordsInRange(string table, int from, int to)
     {
         string command = $@"
             SELECT * 
-            FROM Vocabulary
+            FROM {table}
             WHERE 番号 between {from} and {to}
-            ORDER by random()
-            limit {quantity}";
+            ORDER by random()";
 
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
         return wordsInRange;
@@ -58,6 +72,7 @@ public class GameManager : MonoBehaviour
 
     void LoadNextWord()
     {
+        CheckRoundEnd();
         DataRow row = table.Rows[next];
         questionText.text = row["単語"].ToString();
         spell.text = row["綴り"].ToString();
@@ -98,5 +113,42 @@ public class GameManager : MonoBehaviour
     string RemoveParentheses(string text)
     {
         return Regex.Replace(text, "[()]", "");
+    }
+
+    void CheckRoundEnd()
+    {
+        if (next >= table.Rows.Count)
+        {
+            next = 0;
+            round += 1;
+        }
+    }
+
+    string GetTableName(int number)
+    {
+        string[] tableNames = { "Vocabulary", "Textbook", "NonTextbook" };
+        return tableNames[number];
+    }
+    private bool TryParseAndValidateRange(out int min, out int max)
+    {
+        // 嘗試解析
+        bool okMin = int.TryParse(rangeMin.text, out min);
+        bool okMax = int.TryParse(rangeMax.text, out max);
+
+        // 如果任一解析失敗，給予預設值然後返回 false
+        if (!okMin || !okMax)
+        {
+            if (!okMin)
+                min = 0;  // 可根據需求設定預設值
+            if (!okMax)
+                max = 0;
+            return false;
+        }
+
+        // 若最小值大於最大值也返回 false
+        if (min > max)
+            return false;
+
+        return true;
     }
 }
