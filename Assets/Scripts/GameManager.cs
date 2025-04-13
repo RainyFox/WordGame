@@ -10,6 +10,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] TMP_InputField rangeMin;
     [SerializeField] TMP_InputField rangeMax;
     [SerializeField] GameObject gamePanel;
+    [SerializeField] TextMeshProUGUI roundText;
     [SerializeField] TextMeshProUGUI questionText;
     [SerializeField] TextMeshProUGUI spell;
     [SerializeField] TextMeshProUGUI translate;
@@ -21,7 +22,21 @@ public class GameManager : MonoBehaviour
     bool waitingForRelease = false;
     int next = 0;
     int round = 1;
+    int rangeMinNumber, rangeMaxNumber;
     DataTable table;
+    string tableName;
+    #region Properties
+    public int Round
+    {
+        get => round;
+        set 
+        {
+            round = value;
+            roundText.text = $" {round} 回";
+        }
+    }
+
+    #endregion
     void Start()
     {
         
@@ -35,15 +50,15 @@ public class GameManager : MonoBehaviour
 
     public void GameStart(int type)
     {
-        int rangeMinNumber, rangeMaxNumber;
         if (!TryParseAndValidateRange(out rangeMinNumber, out rangeMaxNumber))
             return;
-        string tableName = GetTableName(type);
-        table = ReadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
+        tableName = GetTableName(type);
+        table = LoadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
         if (table.Rows.Count == 0)
             return;
         ShowAnswer(false);
         LoadNextWord();
+        Round = 1;
         levelSelectPanel.SetActive(false);
         gamePanel.SetActive(true);
     }
@@ -58,7 +73,7 @@ public class GameManager : MonoBehaviour
         textInput.text = "";
         textInput.ActivateInputField();
     }
-    DataTable ReadWordsInRange(string table, int from, int to)
+    DataTable LoadWordsInRange(string table, int from, int to)
     {
         string command = $@"
             SELECT * 
@@ -120,7 +135,8 @@ public class GameManager : MonoBehaviour
         if (next >= table.Rows.Count)
         {
             next = 0;
-            round += 1;
+            Round += 1;
+            table = LoadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
         }
     }
 
