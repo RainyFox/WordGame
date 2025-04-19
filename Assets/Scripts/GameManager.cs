@@ -25,6 +25,7 @@ public class GameManager : MonoBehaviour
     int rangeMinNumber, rangeMaxNumber;
     DataTable table;
     string tableName;
+    int gameMode;
     #region Properties
     public int Round
     {
@@ -48,11 +49,12 @@ public class GameManager : MonoBehaviour
         DetectEnter();
     }
 
-    public void GameStart(int type)
+    public void GameStart(int modeNumber)
     {
         if (!TryParseAndValidateRange(out rangeMinNumber, out rangeMaxNumber))
             return;
-        tableName = GetTableName(type);
+        gameMode = modeNumber;
+        tableName = GetTableName(modeNumber);
         table = LoadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
         if (table.Rows.Count == 0)
             return;
@@ -92,8 +94,15 @@ public class GameManager : MonoBehaviour
         questionText.text = row["単語"].ToString();
         spell.text = row["綴り"].ToString();
         translate.text = row["中国語"].ToString();
-        example.text = RemoveParentheses(row["例"].ToString());
+        SetExampleText(row);
         next += 1;
+    }
+    void SetExampleText(DataRow row)
+    {
+        if(gameMode==1)
+            example.text = row["意味"].ToString();
+        else
+            example.text = RemoveParentheses(row["例"].ToString());
     }
     void ShowAnswer(bool show)
     {
