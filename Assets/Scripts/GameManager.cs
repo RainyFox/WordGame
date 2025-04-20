@@ -53,7 +53,7 @@ public class GameManager : MonoBehaviour
         if (!TryParseAndValidateRange(out rangeMinNumber, out rangeMaxNumber))
             return;
         wordType = modeNumber;
-        tableName = GetTableName(modeNumber);
+        tableName = GetTableType(modeNumber);
         table = LoadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
         if (table.Rows.Count == 0)
             return;
@@ -74,13 +74,23 @@ public class GameManager : MonoBehaviour
         textInput.text = "";
         textInput.ActivateInputField();
     }
-    DataTable LoadWordsInRange(string table, int from, int to)
+    DataTable LoadWordsInRange(string type, int from, int to)
     {
+        int limit = to - from + 1;
+        int offset = from - 1;
         string command = $@"
-            SELECT * 
-            FROM {table}
-            WHERE 番号 between {from} and {to}
-            ORDER by random()";
+            WITH subset AS (
+            SELECT *
+            FROM Vocabulary
+            WHERE タイプ = '{type}'
+            ORDER BY 番号
+            LIMIT {limit}    
+            OFFSET {offset}       
+            )
+            SELECT *
+            FROM subset
+            ORDER BY RANDOM()
+            ";
 
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
         return wordsInRange;
@@ -98,10 +108,7 @@ public class GameManager : MonoBehaviour
     }
     void SetExampleText(DataRow row)
     {
-        if (wordType == 1)
-            example.text = row["意味"].ToString();
-        else
-            example.text = RemoveParentheses(row["例"].ToString());
+        example.text = RemoveParentheses(row["例"].ToString());
     }
     void ShowAnswer(bool show)
     {
@@ -148,9 +155,9 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    string GetTableName(int number)
+    string GetTableType(int number)
     {
-        string[] tableNames = { "Vocabulary", "Textbook", "NonTextbook" };
+        string[] tableNames = { "通常", "テキスト", "口語/ネット/方言" };
         return tableNames[number];
     }
     private bool TryParseAndValidateRange(out int min, out int max)
