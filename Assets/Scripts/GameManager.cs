@@ -1,12 +1,16 @@
-﻿using System.Data;
+﻿using System;
+using System.Collections.Generic;
+using System.Data;
 using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
     #region SerializeField
     [SerializeField] GameObject levelSelectPanel;
+    [SerializeField] ToggleGroup GameModeGroup;
     [SerializeField] TMP_InputField rangeMin;
     [SerializeField] TMP_InputField rangeMax;
     [SerializeField] GameObject gamePanel;
@@ -16,6 +20,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] TextMeshProUGUI translate;
     [SerializeField] TextMeshProUGUI example;
     [SerializeField] TMP_InputField textInput;
+    [SerializeField] Button dontKnowButton;
     #endregion
     SimpleDB db = new();
     bool readyToNext = false;
@@ -25,12 +30,12 @@ public class GameManager : MonoBehaviour
     int rangeMinNumber, rangeMaxNumber;
     DataTable table;
     string tableName;
-    int gameMode;
+    int wordType;
     #region Properties
     public int Round
     {
         get => round;
-        set 
+        set
         {
             round = value;
             roundText.text = $" {round} 回";
@@ -38,12 +43,6 @@ public class GameManager : MonoBehaviour
     }
 
     #endregion
-    void Start()
-    {
-        
-     
-    }
-
     void Update()
     {
         DetectEnter();
@@ -53,7 +52,7 @@ public class GameManager : MonoBehaviour
     {
         if (!TryParseAndValidateRange(out rangeMinNumber, out rangeMaxNumber))
             return;
-        gameMode = modeNumber;
+        wordType = modeNumber;
         tableName = GetTableName(modeNumber);
         table = LoadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
         if (table.Rows.Count == 0)
@@ -99,7 +98,7 @@ public class GameManager : MonoBehaviour
     }
     void SetExampleText(DataRow row)
     {
-        if(gameMode==1)
+        if (wordType == 1)
             example.text = row["意味"].ToString();
         else
             example.text = RemoveParentheses(row["例"].ToString());
@@ -175,5 +174,12 @@ public class GameManager : MonoBehaviour
             return false;
 
         return true;
+    }
+
+    public void OnDontKnowButtonClick()
+    {
+        ShowAnswer(true);
+        readyToNext = true;
+        textInput.text = "";
     }
 }

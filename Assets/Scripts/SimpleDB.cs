@@ -2,6 +2,8 @@ using UnityEngine;
 using Mono.Data.Sqlite;
 using System.Data;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 public class SimpleDB
 {
@@ -97,6 +99,30 @@ public class SimpleDB
                     items += item.ToString() + "\t";
             }
             Debug.Log(items);
+        }
+    }
+
+    public void InsertIntoDB(string tableName, Dictionary<string, object> data)
+    {
+        using (var connection = new SqliteConnection(dbName))
+        {
+            connection.Open();
+            using (var command = connection.CreateCommand())
+            {
+                // 動態生成 SQL INSERT 語法，例如：INSERT INTO tableName (Col1, Col2) VALUES (@Col1, @Col2)
+                string columns = string.Join(", ", data.Keys);
+                string parameters = string.Join(", ", data.Keys.Select(key => "@" + key));
+                command.CommandText = $"INSERT INTO {tableName} ({columns}) VALUES ({parameters})";
+
+                // 加入參數並處理可能的 null 值
+                foreach (var pair in data)
+                {
+                    command.Parameters.AddWithValue("@" + pair.Key, pair.Value ?? DBNull.Value);
+                }
+
+                // 執行命令
+                command.ExecuteNonQuery();
+            }
         }
     }
 }
