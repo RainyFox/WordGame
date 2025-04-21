@@ -24,7 +24,8 @@ public class GameManager : MonoBehaviour
     #endregion
     SimpleDB db = new();
     bool readyToNext = false;
-    bool waitingForRelease = false;
+    private bool waitingForRelease;
+ 
     int next = 0;
     int round = 1;
     int rangeMinNumber, rangeMaxNumber;
@@ -43,6 +44,10 @@ public class GameManager : MonoBehaviour
     }
 
     #endregion
+    private void Start()
+    {
+        textInput.onSubmit.AddListener(OnTextSubmit);
+    }
     void Update()
     {
         DetectEnter();
@@ -65,12 +70,21 @@ public class GameManager : MonoBehaviour
     }
     public void OnTextSubmit(string text)
     {
+        //Ignore compostioning and empty input
+        if (!string.IsNullOrEmpty(Input.compositionString) || textInput.text == "")
+        {
+            textInput.ActivateInputField();
+            return;
+        }
         if (textInput.text == spell.text)
         {
-            ShowAnswer(true);
-            readyToNext = true;
-            waitingForRelease = true;
+            HandleCorrectAnswer();
         }
+        else
+        {
+            HandleWrongAnswer();
+        }
+
         textInput.text = "";
         textInput.ActivateInputField();
     }
@@ -188,5 +202,17 @@ public class GameManager : MonoBehaviour
         ShowAnswer(true);
         readyToNext = true;
         textInput.text = "";
+    }
+
+    void HandleCorrectAnswer()
+    {
+        Debug.Log("Correct answer!");
+        ShowAnswer(true);
+        readyToNext = true;
+        waitingForRelease = true;
+    }
+    void HandleWrongAnswer()
+    {
+        Debug.Log("Wrong answer!");
     }
 }
