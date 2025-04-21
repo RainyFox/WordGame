@@ -34,7 +34,7 @@ public class UserProgress
         }
         else
         {
-            proficiency = Mathf.Max(proficiency - 2, -5);
+            proficiency = Mathf.Max(proficiency - 2, 0);
             totalWrong += 1;
         }
         lastAnswerTimestamp = DateTime.UtcNow.ToString("o");

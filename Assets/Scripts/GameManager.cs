@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using System.Text.RegularExpressions;
 using TMPro;
 using UnityEngine;
@@ -10,10 +11,11 @@ public class GameManager : MonoBehaviour
 {
     #region SerializeField
     [SerializeField] GameObject levelSelectPanel;
-    [SerializeField] ToggleGroup GameModeGroup;
+    [SerializeField] ToggleGroup RandomModeGroup;
     [SerializeField] TMP_InputField rangeMin;
     [SerializeField] TMP_InputField rangeMax;
     [SerializeField] GameObject gamePanel;
+    [SerializeField] TextMeshProUGUI numberText;
     [SerializeField] TextMeshProUGUI roundText;
     [SerializeField] TextMeshProUGUI questionText;
     [SerializeField] TextMeshProUGUI spell;
@@ -30,8 +32,8 @@ public class GameManager : MonoBehaviour
     int round = 1;
     int rangeMinNumber, rangeMaxNumber;
     DataTable table;
-    string tableName;
-    int wordType;
+    string practiceType;
+    RandomType randomType;
     UserProgress currentWordProgress;
     #region Properties
     public int Round
@@ -58,14 +60,12 @@ public class GameManager : MonoBehaviour
     {
         if (!TryParseAndValidateRange(out rangeMinNumber, out rangeMaxNumber))
             return;
-        wordType = modeNumber;
-        tableName = GetTableType(modeNumber);
-        table = LoadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
-        if (table.Rows.Count == 0)
-            return;
+        practiceType = GetPraticeType(modeNumber);
+        randomType = GetRandomType();
+
+        LoadFirstWord();
+
         ShowAnswer(false);
-        LoadNextWord();
-        Round = 1;
         levelSelectPanel.SetActive(false);
         gamePanel.SetActive(true);
     }
@@ -89,7 +89,7 @@ public class GameManager : MonoBehaviour
         textInput.text = "";
         textInput.ActivateInputField();
     }
-    DataTable LoadWordsInRange(string type, int from, int to)
+    DataTable GetTableInRange(string type, int from, int to)
     {
         int limit = to - from + 1;
         int offset = from - 1;
@@ -102,8 +102,11 @@ public class GameManager : MonoBehaviour
             LIMIT {limit}    
             OFFSET {offset}       
             )
-            SELECT *
-            FROM subset
+            SELECT S.*,
+            COALESCE(U.Proficiency, 0) AS Proficiency
+            FROM subset AS S
+            LEFT JOIN UserProgress AS U
+            ON S.番号 = U.番号
             ORDER BY RANDOM()
             ";
 
@@ -111,7 +114,7 @@ public class GameManager : MonoBehaviour
         return wordsInRange;
     }
 
-    void LoadNextWord()
+    void LoadNextWordInTable()
     {
         CheckRoundEnd();
         DataRow row = table.Rows[next];
@@ -152,7 +155,10 @@ public class GameManager : MonoBehaviour
         if (readyToNext && Input.GetKeyDown(KeyCode.Return))
         {
             ShowAnswer(false);
-            LoadNextWord();
+            if (randomType == RandomType.FULLRANDOM)
+                LoadNextWordInTable();
+            else
+                LoadNextWordByWeight(practiceType);
             readyToNext = false;
         }
     }
@@ -168,11 +174,11 @@ public class GameManager : MonoBehaviour
         {
             next = 0;
             Round += 1;
-            table = LoadWordsInRange(tableName, rangeMinNumber, rangeMaxNumber);
+            table = GetTableInRange(practiceType, rangeMinNumber, rangeMaxNumber);
         }
     }
 
-    string GetTableType(int number)
+    string GetPraticeType(int number)
     {
         string[] tableNames = { "通常", "テキスト", "口語/ネット/方言" };
         return tableNames[number];
@@ -210,7 +216,6 @@ public class GameManager : MonoBehaviour
 
     void HandleCorrectAnswer()
     {
-        Debug.Log("Correct answer!");
         AdjustDataAndWrite(true);
         ShowAnswer(true);
         readyToNext = true;
@@ -218,7 +223,6 @@ public class GameManager : MonoBehaviour
     }
     void HandleWrongAnswer()
     {
-        Debug.Log("Wrong answer!");
         AdjustDataAndWrite(false);
     }
     void AdjustDataAndWrite(bool isCorrect)
@@ -240,4 +244,75 @@ public class GameManager : MonoBehaviour
             currentWordProgress = new UserProgress(wordNumber);
     }
 
+    void LoadNextWordByWeight(string type)
+    {
+        int limit = rangeMaxNumber - rangeMinNumber + 1;
+        int offset = rangeMinNumber - 1;
+        // Note: This SQL command will tend to gather high proficiency words in the middle of the table (when without using LIMIT)
+        string command = $@"
+            WITH subset AS (
+            SELECT *
+            FROM Vocabulary
+            WHERE タイプ = '{type}'
+            ORDER BY 番号
+            LIMIT {limit}    
+            OFFSET {offset}       
+            )
+            SELECT S.*,
+            COALESCE(U.Proficiency, 0) AS Proficiency
+            FROM subset AS S
+            LEFT JOIN UserProgress AS U
+            ON S.番号 = U.番号
+            ORDER BY RANDOM()*(0.5      -- 基底
+              * pow(0.5, COALESCE(U.Proficiency,0))   -- 熟練度
+              * CASE                                  -- 時間因子
+                  WHEN U.LastAnswer IS NULL THEN 1
+                  ELSE min(1,
+                      (julianday('now')-julianday(U.LastAnswer)) /
+                      (pow(2,COALESCE(U.Proficiency,0))))
+                END
+             )
+			 LIMIT 1
+            ";
+
+        DataTable wordsInRange = db.GetTableFromSQLcommand(command);
+        DataRow row = wordsInRange.Rows[0];
+        int wordNumber = int.Parse(row["番号"].ToString());
+        numberText.text = wordNumber.ToString();
+        LoadUserProgress(wordNumber);
+        questionText.text = row["単語"].ToString();
+        spell.text = row["綴り"].ToString();
+        translate.text = row["中国語"].ToString();
+        SetExampleText(row);
+    }
+
+    RandomType GetRandomType()
+    {
+        var active = RandomModeGroup.ActiveToggles().FirstOrDefault();
+        if (active.name == "FullRandom")
+        {
+            return RandomType.FULLRANDOM;
+        }
+        else
+        {
+            return RandomType.PROFICIENCY;
+        }
+    }
+
+    void LoadFirstWord()
+    {
+        if (randomType == RandomType.FULLRANDOM)
+        {
+            table = GetTableInRange(practiceType, rangeMinNumber, rangeMaxNumber);
+            if (table.Rows.Count == 0)
+                return;
+            LoadNextWordInTable();
+            Round = 1;
+        }
+        else
+        {
+            LoadNextWordByWeight(practiceType);
+            roundText.gameObject.SetActive(false);
+        }
+    }
 }
