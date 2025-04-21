@@ -112,7 +112,7 @@ public class SimpleDB
                 // 動態生成 SQL INSERT 語法，例如：INSERT INTO tableName (Col1, Col2) VALUES (@Col1, @Col2)
                 string columns = string.Join(", ", data.Keys);
                 string parameters = string.Join(", ", data.Keys.Select(key => "@" + key));
-                command.CommandText = $"INSERT INTO {tableName} ({columns}) VALUES ({parameters})";
+                command.CommandText = $"INSERT OR REPLACE INTO {tableName} ({columns}) VALUES ({parameters})";
 
                 // 加入參數並處理可能的 null 值
                 foreach (var pair in data)

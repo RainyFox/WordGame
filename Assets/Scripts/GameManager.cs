@@ -25,13 +25,14 @@ public class GameManager : MonoBehaviour
     SimpleDB db = new();
     bool readyToNext = false;
     private bool waitingForRelease;
- 
+
     int next = 0;
     int round = 1;
     int rangeMinNumber, rangeMaxNumber;
     DataTable table;
     string tableName;
     int wordType;
+    UserProgress currentWordProgress;
     #region Properties
     public int Round
     {
@@ -114,6 +115,8 @@ public class GameManager : MonoBehaviour
     {
         CheckRoundEnd();
         DataRow row = table.Rows[next];
+        int wordNumber = int.Parse(row["番号"].ToString());
+        LoadUserProgress(wordNumber);
         questionText.text = row["単語"].ToString();
         spell.text = row["綴り"].ToString();
         translate.text = row["中国語"].ToString();
@@ -199,6 +202,7 @@ public class GameManager : MonoBehaviour
 
     public void OnDontKnowButtonClick()
     {
+        HandleWrongAnswer();
         ShowAnswer(true);
         readyToNext = true;
         textInput.text = "";
@@ -207,6 +211,7 @@ public class GameManager : MonoBehaviour
     void HandleCorrectAnswer()
     {
         Debug.Log("Correct answer!");
+        AdjustDataAndWrite(true);
         ShowAnswer(true);
         readyToNext = true;
         waitingForRelease = true;
@@ -214,5 +219,25 @@ public class GameManager : MonoBehaviour
     void HandleWrongAnswer()
     {
         Debug.Log("Wrong answer!");
+        AdjustDataAndWrite(false);
     }
+    void AdjustDataAndWrite(bool isCorrect)
+    {
+        currentWordProgress.OnAnswer(isCorrect);
+        var data = currentWordProgress.ToDictionary();
+        db.InsertIntoDB("UserProgress", data);
+    }
+    void LoadUserProgress(int wordNumber)
+    {
+        string command = $@"
+        SELECT *
+        FROM UserProgress
+        WHERE 番号 = {wordNumber}";
+        DataTable result = db.GetTableFromSQLcommand(command);
+        if (result.Rows.Count > 0)
+            currentWordProgress = new UserProgress(result.Rows[0]);
+        else
+            currentWordProgress = new UserProgress(wordNumber);
+    }
+
 }
