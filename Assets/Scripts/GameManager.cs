@@ -180,7 +180,7 @@ public class GameManager : MonoBehaviour
 
     string GetPraticeType(int number)
     {
-        string[] tableNames = { "通常", "テキスト", "口語/ネット/方言" };
+        string[] tableNames = { "通常", "テキスト", "口語/ネット/方言", "ALL" };
         return tableNames[number];
     }
     private bool TryParseAndValidateRange(out int min, out int max)
@@ -248,12 +248,15 @@ public class GameManager : MonoBehaviour
     {
         int limit = rangeMaxNumber - rangeMinNumber + 1;
         int offset = rangeMinNumber - 1;
+        string whereClause = string.IsNullOrEmpty(type) || type == "ALL"
+                       ? ""
+                       : $"WHERE タイプ = '{type}'";
         // Note: This SQL command will tend to gather high proficiency words in the middle of the table (when without using LIMIT)
         string command = $@"
             WITH subset AS (
             SELECT *
             FROM Vocabulary
-            WHERE タイプ = '{type}'
+            {whereClause}
             ORDER BY 番号
             LIMIT {limit}    
             OFFSET {offset}       
