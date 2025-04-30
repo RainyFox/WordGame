@@ -23,6 +23,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] TextMeshProUGUI example;
     [SerializeField] TMP_InputField textInput;
     [SerializeField] Button dontKnowButton;
+    [SerializeField] TextMeshProUGUI translateDirection;
     #endregion
     SimpleDB db = new();
     bool readyToNext = false;
@@ -35,6 +36,7 @@ public class GameManager : MonoBehaviour
     string practiceType;
     RandomType randomType;
     UserProgress currentWordProgress;
+    bool JpToCn = true;
     #region Properties
     public int Round
     {
@@ -64,7 +66,6 @@ public class GameManager : MonoBehaviour
         randomType = GetRandomType();
 
         LoadFirstWord();
-
         ShowAnswer(false);
         levelSelectPanel.SetActive(false);
         gamePanel.SetActive(true);
@@ -317,5 +318,14 @@ public class GameManager : MonoBehaviour
             LoadNextWordByWeight(practiceType);
             roundText.gameObject.SetActive(false);
         }
+    }
+
+    public void TranslateDirectionSwitch()
+    {
+        JpToCn = !JpToCn;
+        if (JpToCn)
+            translateDirection.text = "→";
+        else
+            translateDirection.text = "←";
     }
 }
