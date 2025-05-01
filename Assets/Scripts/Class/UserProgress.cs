@@ -10,6 +10,7 @@ public class UserProgress
     public string lastAnswerTimestamp;
     public int totalCorrect;
     public int totalWrong;
+    public string mode;
     public UserProgress(DataRow row)
     {
         wordNumber = int.Parse(row["番号"].ToString());
@@ -17,13 +18,15 @@ public class UserProgress
         lastAnswerTimestamp = row["LastAnswer"].ToString();
         totalCorrect = int.Parse(row["TotalCorrect"].ToString());
         totalWrong = int.Parse(row["TotalWrong"].ToString());
+        mode = row["Mode"].ToString();
     }
-    public UserProgress(int wordNumber)
+    public UserProgress(int wordNumber, string mode)
     {
         this.wordNumber = wordNumber;
         proficiency = 0;
         totalCorrect = 0;
         totalWrong = 0;
+        this.mode = mode;
     }
     public void OnAnswer(bool isCorrect)
     {
@@ -48,7 +51,8 @@ public class UserProgress
             { "proficiency", proficiency },
             { "LastAnswer", lastAnswerTimestamp },
             { "TotalCorrect", totalCorrect },
-            { "TotalWrong", totalWrong }
+            { "TotalWrong", totalWrong },
+            { "Mode", mode  }
         };
         return data;
     }

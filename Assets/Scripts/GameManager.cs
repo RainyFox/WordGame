@@ -94,11 +94,14 @@ public class GameManager : MonoBehaviour
     {
         int limit = to - from + 1;
         int offset = from - 1;
+        string whereClause = string.IsNullOrEmpty(type) || type == "ALL"
+                   ? ""
+                   : $"WHERE タイプ = '{type}'";
         string command = $@"
             WITH subset AS (
             SELECT *
             FROM Vocabulary
-            WHERE タイプ = '{type}'
+            {whereClause}
             ORDER BY 番号
             LIMIT {limit}    
             OFFSET {offset}       
@@ -119,12 +122,7 @@ public class GameManager : MonoBehaviour
     {
         CheckRoundEnd();
         DataRow row = table.Rows[next];
-        int wordNumber = int.Parse(row["番号"].ToString());
-        LoadUserProgress(wordNumber);
-        questionText.text = row["単語"].ToString();
-        spell.text = row["綴り"].ToString();
-        translate.text = row["中国語"].ToString();
-        SetExampleText(row);
+        RenderQuestions(row);
         next += 1;
     }
     void SetExampleText(DataRow row)
@@ -234,15 +232,17 @@ public class GameManager : MonoBehaviour
     }
     void LoadUserProgress(int wordNumber)
     {
+        string mode = JpToCn ? "JpToCn" : "CnToJp";
         string command = $@"
         SELECT *
         FROM UserProgress
-        WHERE 番号 = {wordNumber}";
+        WHERE 番号 = {wordNumber}
+        AND Mode = '{mode}'";
         DataTable result = db.GetTableFromSQLcommand(command);
         if (result.Rows.Count > 0)
             currentWordProgress = new UserProgress(result.Rows[0]);
         else
-            currentWordProgress = new UserProgress(wordNumber);
+            currentWordProgress = new UserProgress(wordNumber,mode);
     }
 
     void LoadNextWordByWeight(string type)
@@ -267,6 +267,7 @@ public class GameManager : MonoBehaviour
             FROM subset AS S
             LEFT JOIN UserProgress AS U
             ON S.番号 = U.番号
+            AND U.Mode = '{(JpToCn ? "JpToCn" : "CnToJp")}'
             ORDER BY RANDOM()*(0.5      -- 基底
               * pow(0.5, COALESCE(U.Proficiency,0))   -- 熟練度
               * CASE                                  -- 時間因子
@@ -281,13 +282,7 @@ public class GameManager : MonoBehaviour
 
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
         DataRow row = wordsInRange.Rows[0];
-        int wordNumber = int.Parse(row["番号"].ToString());
-        numberText.text = wordNumber.ToString();
-        LoadUserProgress(wordNumber);
-        questionText.text = row["単語"].ToString();
-        spell.text = row["綴り"].ToString();
-        translate.text = row["中国語"].ToString();
-        SetExampleText(row);
+        RenderQuestions(row);
     }
 
     RandomType GetRandomType()
@@ -327,5 +322,25 @@ public class GameManager : MonoBehaviour
             translateDirection.text = "→";
         else
             translateDirection.text = "←";
+    }
+
+    void RenderQuestions(DataRow row)
+    {
+        int wordNumber = int.Parse(row["番号"].ToString());
+        numberText.text = wordNumber.ToString();
+        LoadUserProgress(wordNumber);
+        if (JpToCn)
+        {
+            questionText.text = row["単語"].ToString();
+            spell.text = row["綴り"].ToString();
+            translate.text = row["中国語"].ToString();
+        }
+        else
+        {
+            questionText.text = row["中国語"].ToString();
+            spell.text = row["単語"].ToString();
+            translate.text = row["綴り"].ToString();
+        }
+        SetExampleText(row);
     }
 }
