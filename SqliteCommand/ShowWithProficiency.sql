@@ -6,8 +6,8 @@ WITH subset AS (
 )
 SELECT  S.*,                              
         COALESCE(U.Proficiency, 0) AS Proficiency,
-		U.LastAnswer
+		U.Mode
 FROM    subset  AS S
 LEFT JOIN UserProgress AS U
        ON U.番号 = S.番号                  
-ORDER BY Proficiency
+ORDER BY 番号
