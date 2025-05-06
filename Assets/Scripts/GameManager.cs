@@ -24,6 +24,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] TMP_InputField textInput;
     [SerializeField] Button dontKnowButton;
     [SerializeField] TextMeshProUGUI translateDirection;
+    [SerializeField] TMP_FontAsset JpFont;
+    [SerializeField] TMP_FontAsset CnFont;
     #endregion
     SimpleDB db = new();
     bool readyToNext = false;
@@ -64,7 +66,7 @@ public class GameManager : MonoBehaviour
             return;
         practiceType = GetPraticeType(modeNumber);
         randomType = GetRandomType();
-
+        AdjustFontSet();
         LoadFirstWord();
         ShowAnswer(false);
         levelSelectPanel.SetActive(false);
@@ -86,7 +88,7 @@ public class GameManager : MonoBehaviour
         {
             HandleWrongAnswer();
         }
-
+        
         textInput.text = "";
         textInput.ActivateInputField();
     }
@@ -342,5 +344,14 @@ public class GameManager : MonoBehaviour
             translate.text = row["綴り"].ToString();
         }
         SetExampleText(row);
+    }
+
+    void AdjustFontSet()
+    {
+        if (!JpToCn)
+        {
+            questionText.font = CnFont;
+            translate.font = JpFont;
+        }
     }
 }

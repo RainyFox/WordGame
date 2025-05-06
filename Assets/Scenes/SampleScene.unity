@@ -2477,6 +2477,8 @@ MonoBehaviour:
   textInput: {fileID: 591333196}
   dontKnowButton: {fileID: 31231843}
   translateDirection: {fileID: 1704676940}
+  JpFont: {fileID: 11400000, guid: 31fa1d28a1afaa24ab0335df1c6dfcf6, type: 2}
+  CnFont: {fileID: 11400000, guid: 5d85aeaef804dcd408a9f3e627289049, type: 2}
 --- !u!1 &751920600
 GameObject:
   m_ObjectHideFlags: 0
