@@ -22,6 +22,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] TextMeshProUGUI translate;
     [SerializeField] TextMeshProUGUI example;
     [SerializeField] TMP_InputField textInput;
+    [SerializeField] Button multipleSelectionButton;
+    [SerializeField] MultipleSelectionPanel multipleSelectionPanel;
     [SerializeField] Button dontKnowButton;
     [SerializeField] TextMeshProUGUI translateDirection;
     [SerializeField] TMP_FontAsset JpFont;
@@ -64,9 +66,7 @@ public class GameManager : MonoBehaviour
     {
         if (!TryParseAndValidateRange(out rangeMinNumber, out rangeMaxNumber))
             return;
-        practiceType = GetPraticeType(modeNumber);
-        randomType = GetRandomType();
-        AdjustFontSet();
+        ApplyModeSettings(modeNumber);
         LoadFirstWord();
         ShowAnswer(false);
         levelSelectPanel.SetActive(false);
@@ -217,6 +217,7 @@ public class GameManager : MonoBehaviour
 
     void HandleCorrectAnswer()
     {
+        multipleSelectionPanel.gameObject.SetActive(false);
         AdjustDataAndWrite(true);
         ShowAnswer(true);
         readyToNext = true;
@@ -285,6 +286,8 @@ public class GameManager : MonoBehaviour
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
         DataRow row = wordsInRange.Rows[0];
         RenderQuestions(row);
+        if(!JpToCn)
+            RenderMultipleChoices(row["単語"].ToString(),type, int.Parse(row["番号"].ToString()));
     }
 
     RandomType GetRandomType()
@@ -353,5 +356,57 @@ public class GameManager : MonoBehaviour
             questionText.font = CnFont;
             translate.font = JpFont;
         }
+    }
+
+    void ApplyModeSettings(int modeNumber)
+    {
+        practiceType = GetPraticeType(modeNumber);
+        randomType = GetRandomType();
+        AdjustFontSet();
+        if (!JpToCn)
+            multipleSelectionButton.gameObject.SetActive(true);
+    }
+    public void ShowMultipleSelections(bool show)
+    {
+        multipleSelectionPanel.gameObject.SetActive(show);
+    }
+    public void OnMultipleSelctionButton(int number)
+    {
+        string answer = multipleSelectionPanel.GetText(number);
+        textInput.text = answer;
+        OnTextSubmit(answer);
+        waitingForRelease = false; // Cancel the waiting for release since not enter the answer by keyboard
+    }
+    void RenderMultipleChoices(string answer, string type, int wordNumber)
+    {
+        string[] choices = new string[4];
+        DataTable distractors = GetDistractors(type, wordNumber);
+
+        choices[0] = answer;
+        for (int i = 1; i < 4; i++)
+        {
+            choices[i] = distractors.Rows[i - 1]["単語"].ToString();
+        }
+        // Shuffle the choices
+        var shuffled = choices.OrderBy(_ => UnityEngine.Random.value).ToArray();
+        for (int i = 0; i < 4; i++)
+        {
+            multipleSelectionPanel.SetText(i, shuffled[i]);
+        }
+    }
+    DataTable GetDistractors(string type, int wordNumber)
+    {
+        string whereClause = string.IsNullOrEmpty(type) || type == "ALL"
+                     ? $"WHERE 番号 <> {wordNumber}"
+                     : $"WHERE タイプ = '{type}'  AND 番号 <> {wordNumber}";
+        string command = $@"
+            SELECT 単語
+            FROM Vocabulary
+            {whereClause}
+            ORDER BY RANDOM()
+            LIMIT 3
+            ";
+        DataTable wordsInRange = db.GetTableFromSQLcommand(command);
+        return wordsInRange;
     }
 }
