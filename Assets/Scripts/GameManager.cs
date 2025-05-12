@@ -366,9 +366,10 @@ public class GameManager : MonoBehaviour
         if (!JpToCn)
             multipleSelectionButton.gameObject.SetActive(true);
     }
-    public void ShowMultipleSelections(bool show)
+  
+    public void ToggleMultipleSelections()
     {
-        multipleSelectionPanel.gameObject.SetActive(show);
+        multipleSelectionPanel.gameObject.SetActive(!multipleSelectionPanel.gameObject.activeSelf);
     }
     public void OnMultipleSelctionButton(int number)
     {
