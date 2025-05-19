@@ -59,7 +59,7 @@ public class GameManager : MonoBehaviour
     }
     void Update()
     {
-        DetectEnter();
+        DetectProceedTrigger();
     }
 
     public void GameStart(int modeNumber)
@@ -138,7 +138,7 @@ public class GameManager : MonoBehaviour
         example.enabled = show;
     }
 
-    void DetectEnter()
+    void DetectProceedTrigger()
     {
         // 如果還在等你鬆開按鍵，就不處理下一題的行為
         if (waitingForRelease)
@@ -153,7 +153,7 @@ public class GameManager : MonoBehaviour
         }
 
         // 真正偵測第二次按 Enter
-        if (readyToNext && Input.GetKeyDown(KeyCode.Return))
+        if (readyToNext && (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Mouse0)))
         {
             ShowAnswer(false);
             if (randomType == RandomType.FULLRANDOM)
