@@ -88,7 +88,7 @@ public class GameManager : MonoBehaviour
         {
             HandleWrongAnswer();
         }
-        
+
         textInput.text = "";
         textInput.ActivateInputField();
     }
@@ -245,7 +245,7 @@ public class GameManager : MonoBehaviour
         if (result.Rows.Count > 0)
             currentWordProgress = new UserProgress(result.Rows[0]);
         else
-            currentWordProgress = new UserProgress(wordNumber,mode);
+            currentWordProgress = new UserProgress(wordNumber, mode);
     }
 
     void LoadNextWordByWeight(string type)
@@ -286,8 +286,8 @@ public class GameManager : MonoBehaviour
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
         DataRow row = wordsInRange.Rows[0];
         RenderQuestions(row);
-        if(!JpToCn)
-            RenderMultipleChoices(row["単語"].ToString(),type, int.Parse(row["番号"].ToString()));
+
+        RenderMultipleChoices(row, type, int.Parse(row["番号"].ToString()));
     }
 
     RandomType GetRandomType()
@@ -363,10 +363,8 @@ public class GameManager : MonoBehaviour
         practiceType = GetPraticeType(modeNumber);
         randomType = GetRandomType();
         AdjustFontSet();
-        if (!JpToCn)
-            multipleSelectionButton.gameObject.SetActive(true);
     }
-  
+
     public void ToggleMultipleSelections()
     {
         multipleSelectionPanel.gameObject.SetActive(!multipleSelectionPanel.gameObject.activeSelf);
@@ -378,15 +376,16 @@ public class GameManager : MonoBehaviour
         OnTextSubmit(answer);
         waitingForRelease = false; // Cancel the waiting for release since not enter the answer by keyboard
     }
-    void RenderMultipleChoices(string answer, string type, int wordNumber)
+    void RenderMultipleChoices(DataRow answerRow, string type, int wordNumber)
     {
         string[] choices = new string[4];
         DataTable distractors = GetDistractors(type, wordNumber);
 
-        choices[0] = answer;
+
+        choices[0] = answerRow[JpToCn ? "綴り" : "単語"].ToString();
         for (int i = 1; i < 4; i++)
         {
-            choices[i] = distractors.Rows[i - 1]["単語"].ToString();
+            choices[i] = distractors.Rows[i - 1][JpToCn ? "綴り" : "単語"].ToString();
         }
         // Shuffle the choices
         var shuffled = choices.OrderBy(_ => UnityEngine.Random.value).ToArray();
@@ -401,7 +400,7 @@ public class GameManager : MonoBehaviour
                      ? $"WHERE 番号 <> {wordNumber}"
                      : $"WHERE タイプ = '{type}'  AND 番号 <> {wordNumber}";
         string command = $@"
-            SELECT 単語
+            SELECT 単語, 綴り
             FROM Vocabulary
             {whereClause}
             ORDER BY RANDOM()
