@@ -250,20 +250,17 @@ public class GameManager : MonoBehaviour
 
     void LoadNextWordByWeight(string type)
     {
-        int limit = rangeMaxNumber - rangeMinNumber + 1;
-        int offset = rangeMinNumber - 1;
         string whereClause = string.IsNullOrEmpty(type) || type == "ALL"
                        ? ""
-                       : $"WHERE タイプ = '{type}'";
+                       : $"AND (タイプ = '{type}')";
         // Note: This SQL command will tend to gather high proficiency words in the middle of the table (when without using LIMIT)
         string command = $@"
             WITH subset AS (
             SELECT *
             FROM Vocabulary
+            WHERE 番号 BETWEEN {rangeMinNumber} AND {rangeMaxNumber}
             {whereClause}
-            ORDER BY 番号
-            LIMIT {limit}    
-            OFFSET {offset}       
+            ORDER BY 番号     
             )
             SELECT S.*,
             COALESCE(U.Proficiency, 0) AS Proficiency
@@ -284,6 +281,11 @@ public class GameManager : MonoBehaviour
             ";
 
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
+        if (wordsInRange.Rows.Count == 0)
+        {
+            Debug.LogWarning("No words found in the specified range and type.");
+            return;
+        }
         DataRow row = wordsInRange.Rows[0];
         RenderQuestions(row);
 
