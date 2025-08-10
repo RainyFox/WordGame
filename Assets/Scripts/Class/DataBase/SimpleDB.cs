@@ -1,13 +1,13 @@
 using UnityEngine;
-using Mono.Data.Sqlite;
 using System.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Data.Sqlite;
 
 public class SimpleDB
 {
-    private string dbPath = "URI=file:WordGame.db";
+    private string dbPath = "Data Source=WordGame.db";
 
     public SimpleDB() { }
     public SimpleDB(string path)
