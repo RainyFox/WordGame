@@ -29,10 +29,9 @@ public class GameManager : MonoBehaviour
     [SerializeField] TMP_FontAsset JpFont;
     [SerializeField] TMP_FontAsset CnFont;
     #endregion
-    SimpleDB db = new();
+    SimpleDB db;
     bool readyToNext = false;
     private bool waitingForRelease;
-
     int next = 0;
     int round = 1;
     int rangeMinNumber, rangeMaxNumber;
@@ -53,9 +52,17 @@ public class GameManager : MonoBehaviour
     }
 
     #endregion
-    private void Start()
+    async void Start()
     {
         textInput.onSubmit.AddListener(OnTextSubmit);
+        bool test = AppConfig.I.TestMode;
+        if (test)
+            db = new (); // For testing purposes, use a different database
+        else
+        {
+            await DBBootstrap.Ready; // Make sure the database is ready before proceeding
+            db = DBBootstrap.Instance;
+        }
     }
     void Update()
     {

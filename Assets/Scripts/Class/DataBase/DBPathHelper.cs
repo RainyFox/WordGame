@@ -16,7 +16,10 @@ public class DBPathHelper
         string dstPath = Path.Combine(Application.persistentDataPath, DB_NAME);
 
         if (File.Exists(dstPath))
+        {
+           Debug.Log($"Database exists in writable path: {dstPath}");
             return dstPath;                       // 已存在，直接用
+        }
 
         string srcPath = Path.Combine(Application.streamingAssetsPath, DB_NAME);
 
@@ -37,7 +40,7 @@ public class DBPathHelper
         File.Copy(srcPath, dstPath, overwrite: true);
 #endif
 
-        Debug.Log($"資料庫已複製到可寫路徑: {dstPath}");
+        Debug.Log($"Database copied to writable path: {dstPath}");
         return dstPath;
     }
 }

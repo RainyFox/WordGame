@@ -7,17 +7,17 @@ using Microsoft.Data.Sqlite;
 
 public class SimpleDB
 {
-    private string dbPath = "Data Source=WordGame.db";
+    private string connectString = "Data Source=WordGame.db";
 
     public SimpleDB() { }
     public SimpleDB(string path)
     {
-        dbPath = path;
+        connectString = "Data Source ="+path;
     }
 
     public void CreateDB()
     {
-        using (var connection = new SqliteConnection(dbPath))
+        using (var connection = new SqliteConnection(connectString))
         {
             connection.Open();
             connection.Close();
@@ -26,7 +26,7 @@ public class SimpleDB
     public DataTable ReadFromDB(string tableName, int? id = null)
     {
         //Create the db connection
-        using (SqliteConnection connection = new SqliteConnection(dbPath))
+        using (SqliteConnection connection = new SqliteConnection(connectString))
         {
             connection.Open();
             //Set up command to allow db control
@@ -47,7 +47,7 @@ public class SimpleDB
 
     public DataTable GetTableFromSQLcommand(string sqlCommand)
     {
-        using (SqliteConnection connection = new SqliteConnection(dbPath))
+        using (SqliteConnection connection = new SqliteConnection(connectString))
         {
             connection.Open();
             using (SqliteCommand command = connection.CreateCommand())
@@ -110,7 +110,7 @@ public class SimpleDB
 
     public void InsertIntoDB(string tableName, Dictionary<string, object> data)
     {
-        using (var connection = new SqliteConnection(dbPath))
+        using (var connection = new SqliteConnection(connectString))
         {
             connection.Open();
             using (var command = connection.CreateCommand())
