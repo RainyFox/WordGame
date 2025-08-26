@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -55,12 +56,22 @@ public class GameManager : MonoBehaviour
     async void Start()
     {
         textInput.onSubmit.AddListener(OnTextSubmit);
-        bool test = AppConfig.I.TestMode;
-        if (test)
-            db = new (); // For testing purposes, use a different database
+        await InitializeDatabaseAsync();
+    }
+    private async Task InitializeDatabaseAsync()
+    {
+        bool isTest = AppConfig.I.TestMode;
+        Debug.LogWarning($"Test Mode: {isTest}");
+
+        if (isTest)
+        {
+            var projRoot = System.IO.Directory.GetParent(Application.dataPath)!.FullName;
+            var abs = System.IO.Path.Combine(projRoot, "WordGame.db");
+            db = new SimpleDB(abs);  
+        }
         else
         {
-            await DBBootstrap.Ready; // Make sure the database is ready before proceeding
+            await DBBootstrap.Ready;
             db = DBBootstrap.Instance;
         }
     }
@@ -418,4 +429,5 @@ public class GameManager : MonoBehaviour
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
         return wordsInRange;
     }
+
 }

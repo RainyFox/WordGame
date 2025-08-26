@@ -7,9 +7,7 @@ using Microsoft.Data.Sqlite;
 
 public class SimpleDB
 {
-    private string connectString = "Data Source=WordGame.db";
-
-    public SimpleDB() { }
+    private string connectString;
     public SimpleDB(string path)
     {
         connectString = "Data Source ="+path;
