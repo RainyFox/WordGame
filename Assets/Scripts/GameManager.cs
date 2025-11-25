@@ -199,7 +199,7 @@ public class GameManager : MonoBehaviour
 
     string GetPraticeType(int number)
     {
-        string[] tableNames = { "通常", "テキスト", "口語/ネット/方言", "ALL" };
+        string[] tableNames = { "通常", "テキスト", "口語/ネット/方言", "文法","ALL" };
         return tableNames[number];
     }
     private bool TryParseAndValidateRange(out int min, out int max)
