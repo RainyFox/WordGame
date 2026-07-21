@@ -61,3 +61,6 @@ sysinfo.txt
 
 # Crashlytics generated file
 crashlytics-build.properties
+
+# Accidental SQLite database filename
+/Data Source = WordGame.db
