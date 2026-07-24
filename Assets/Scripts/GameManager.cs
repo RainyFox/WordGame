@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -271,7 +272,6 @@ public class GameManager : MonoBehaviour
         string whereClause = string.IsNullOrEmpty(type) || type == "ALL"
                        ? ""
                        : $"AND (タイプ = '{type}')";
-        // Note: This SQL command will tend to gather high proficiency words in the middle of the table (when without using LIMIT)
         string command = $@"
             WITH subset AS (
             SELECT *
@@ -281,21 +281,21 @@ public class GameManager : MonoBehaviour
             ORDER BY 番号     
             )
             SELECT S.*,
-            COALESCE(U.Proficiency, 0) AS Proficiency
-            FROM subset AS S
-            LEFT JOIN UserProgress AS U
-            ON S.番号 = U.番号
-            AND U.Mode = '{(JpToCn ? "JpToCn" : "CnToJp")}'
-            ORDER BY RANDOM()*(0.5      -- 基底
-              * pow(0.5, COALESCE(U.Proficiency,0))   -- 熟練度
-              * CASE                                  -- 時間因子
+            COALESCE(U.Proficiency, 0) AS Proficiency,
+            (0.5                                      -- 基底
+              * pow(0.5, COALESCE(U.Proficiency,0))  -- 熟練度
+              * CASE                                 -- 時間因子
                   WHEN U.LastAnswer IS NULL THEN 1
                   ELSE min(1,
                       (julianday('now')-julianday(U.LastAnswer)) /
                       (pow(2,COALESCE(U.Proficiency,0))))
                 END
-             )
-			 LIMIT 1
+            ) AS SelectionWeight
+            FROM subset AS S
+            LEFT JOIN UserProgress AS U
+            ON S.番号 = U.番号
+            AND U.Mode = '{(JpToCn ? "JpToCn" : "CnToJp")}'
+            ORDER BY S.番号
             ";
 
         DataTable wordsInRange = db.GetTableFromSQLcommand(command);
@@ -304,10 +304,94 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("No words found in the specified range and type.");
             return;
         }
-        DataRow row = wordsInRange.Rows[0];
+        DataRow row = SelectRowByWeight(wordsInRange);
         RenderQuestions(row);
 
         RenderMultipleChoices(row, type, int.Parse(row["番号"].ToString()));
+    }
+
+    DataRow SelectRowByWeight(DataTable candidates)
+    {
+        double[] weights = new double[candidates.Rows.Count];
+        for (int i = 0; i < candidates.Rows.Count; i++)
+        {
+            weights[i] = GetSelectionWeight(candidates.Rows[i]);
+        }
+
+        int selectedIndex = SelectWeightedIndex(weights, UnityEngine.Random.value);
+        if (selectedIndex < 0)
+        {
+            selectedIndex = UnityEngine.Random.Range(0, candidates.Rows.Count);
+        }
+
+        return candidates.Rows[selectedIndex];
+    }
+
+    static double GetSelectionWeight(DataRow row)
+    {
+        object rawValue = row["SelectionWeight"];
+        if (rawValue == null || rawValue == DBNull.Value)
+            return 0;
+
+        string text = rawValue.ToString();
+        bool parsed = double.TryParse(
+            text,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out double weight);
+
+        if (!parsed)
+        {
+            parsed = double.TryParse(
+                text,
+                NumberStyles.Float,
+                CultureInfo.CurrentCulture,
+                out weight);
+        }
+
+        if (!parsed || weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight))
+            return 0;
+
+        return weight;
+    }
+
+    internal static int SelectWeightedIndex(IReadOnlyList<double> weights, double normalizedRandomValue)
+    {
+        double totalWeight = 0;
+        int lastPositiveIndex = -1;
+
+        for (int i = 0; i < weights.Count; i++)
+        {
+            double weight = weights[i];
+            if (weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight))
+                continue;
+
+            totalWeight += weight;
+            lastPositiveIndex = i;
+        }
+
+        if (lastPositiveIndex < 0 || totalWeight <= 0 || double.IsInfinity(totalWeight))
+            return -1;
+
+        if (double.IsNaN(normalizedRandomValue))
+            normalizedRandomValue = 0;
+
+        normalizedRandomValue = Math.Max(0, Math.Min(1, normalizedRandomValue));
+        double target = normalizedRandomValue * totalWeight;
+        double cumulativeWeight = 0;
+
+        for (int i = 0; i < weights.Count; i++)
+        {
+            double weight = weights[i];
+            if (weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight))
+                continue;
+
+            cumulativeWeight += weight;
+            if (target < cumulativeWeight)
+                return i;
+        }
+
+        return lastPositiveIndex;
     }
 
     RandomType GetRandomType()
