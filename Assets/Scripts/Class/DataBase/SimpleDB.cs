@@ -1,4 +1,4 @@
-using UnityEngine;
+Ôªøusing UnityEngine;
 using System.Data;
 using System;
 using System.Collections.Generic;
@@ -11,6 +11,71 @@ public class SimpleDB
     public SimpleDB(string path)
     {
         connectString = "Data Source ="+path;
+        EnsureUserProgressNextReviewColumn();
+    }
+
+    private void EnsureUserProgressNextReviewColumn()
+    {
+        using (var connection = new SqliteConnection(connectString))
+        {
+            connection.Open();
+
+            bool tableExists = false;
+            bool columnExists = false;
+            using (var checkCommand = connection.CreateCommand())
+            {
+                checkCommand.CommandText = "PRAGMA table_info(UserProgress)";
+                using (var reader = checkCommand.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        tableExists = true;
+                        if (string.Equals(reader.GetString(1), "NextReview", StringComparison.OrdinalIgnoreCase))
+                        {
+                            columnExists = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!tableExists)
+                return;
+
+            if (!columnExists)
+            {
+                using (var alterCommand = connection.CreateCommand())
+                {
+                    alterCommand.CommandText = "ALTER TABLE UserProgress ADD COLUMN NextReview TEXT";
+                    alterCommand.ExecuteNonQuery();
+                }
+            }
+
+            using (var migrateCommand = connection.CreateCommand())
+            {
+                migrateCommand.CommandText = @"
+                    UPDATE UserProgress
+                    SET NextReview = strftime(
+                        '%Y-%m-%dT%H:%M:%fZ',
+                        LastAnswer,
+                        printf(
+                            '+%d days',
+                            CASE
+                                WHEN COALESCE(Proficiency, 0) <= 0 THEN 1
+                                WHEN Proficiency = 1 THEN 2
+                                WHEN Proficiency = 2 THEN 4
+                                WHEN Proficiency = 3 THEN 8
+                                WHEN Proficiency = 4 THEN 16
+                                ELSE 32
+                            END
+                        )
+                    )
+                    WHERE (NextReview IS NULL OR NextReview = '')
+                      AND LastAnswer IS NOT NULL
+                      AND LastAnswer <> ''";
+                migrateCommand.ExecuteNonQuery();
+            }
+        }
     }
 
     public void CreateDB()
@@ -113,18 +178,18 @@ public class SimpleDB
             connection.Open();
             using (var command = connection.CreateCommand())
             {
-                // ∞ ∫A•Õ¶® SQL INSERT ªy™k°A®“¶p°GINSERT INTO tableName (Col1, Col2) VALUES (@Col1, @Col2)
+                // ÂãïÊÖãÁîüÊàê SQL INSERT Ë™ûÊ≥ïÔºå‰æãÂ¶ÇÔºöINSERT INTO tableName (Col1, Col2) VALUES (@Col1, @Col2)
                 string columns = string.Join(", ", data.Keys);
                 string parameters = string.Join(", ", data.Keys.Select(key => "@" + key));
                 command.CommandText = $"INSERT OR REPLACE INTO {tableName} ({columns}) VALUES ({parameters})";
 
-                // •[§J∞—º∆®√≥B≤z•iØ‡™∫ null ≠»
+                // Âä†ÂÖ•ÂèÉÊï∏‰∏¶ËôïÁêÜÂèØËÉΩÁöÑ null ÂÄº
                 foreach (var pair in data)
                 {
                     command.Parameters.AddWithValue("@" + pair.Key, pair.Value ?? DBNull.Value);
                 }
 
-                // ∞ı¶Ê©R•O
+                // Âü∑Ë°åÂëΩ‰ª§
                 command.ExecuteNonQuery();
             }
         }

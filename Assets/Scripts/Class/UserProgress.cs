@@ -8,6 +8,7 @@ public class UserProgress
     public int wordNumber;
     public int proficiency;
     public string lastAnswerTimestamp;
+    public string nextReviewTimestamp;
     public int totalCorrect;
     public int totalWrong;
     public string mode;
@@ -16,6 +17,9 @@ public class UserProgress
         wordNumber = int.Parse(row["番号"].ToString());
         proficiency = int.Parse(row["proficiency"].ToString());
         lastAnswerTimestamp = row["LastAnswer"].ToString();
+        nextReviewTimestamp = row.Table.Columns.Contains("NextReview")
+            ? row["NextReview"].ToString()
+            : null;
         totalCorrect = int.Parse(row["TotalCorrect"].ToString());
         totalWrong = int.Parse(row["TotalWrong"].ToString());
         mode = row["Mode"].ToString();
@@ -40,7 +44,11 @@ public class UserProgress
             proficiency = Mathf.Max(proficiency - 1, 0);
             totalWrong += 1;
         }
-        lastAnswerTimestamp = DateTime.UtcNow.ToString("o");
+        DateTime answeredAt = DateTime.UtcNow;
+        lastAnswerTimestamp = answeredAt.ToString("o");
+        nextReviewTimestamp = answeredAt
+            .AddDays(Math.Pow(2, proficiency))
+            .ToString("o");
     }
 
     public Dictionary<string, object> ToDictionary()
@@ -50,6 +58,7 @@ public class UserProgress
             { "番号", wordNumber },
             { "proficiency", proficiency },
             { "LastAnswer", lastAnswerTimestamp },
+            { "NextReview", nextReviewTimestamp },
             { "TotalCorrect", totalCorrect },
             { "TotalWrong", totalWrong },
             { "Mode", mode  }
