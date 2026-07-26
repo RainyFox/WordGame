@@ -42,6 +42,35 @@ public class GameManager : MonoBehaviour
     RandomType randomType;
     UserProgress currentWordProgress;
     bool JpToCn = true;
+    const string ReviewCandidateQueryTemplate = @"
+        WITH subset AS (
+            SELECT *
+            FROM Vocabulary
+            WHERE 番号 BETWEEN {0} AND {1}
+            {2}
+            ORDER BY 番号
+        )
+        SELECT S.*,
+            COALESCE(U.Proficiency, 0) AS Proficiency,
+            U.LastAnswer AS LastAnswer,
+            U.NextReview AS NextReview,
+            CASE
+                WHEN U.LastAnswer IS NULL OR U.LastAnswer = '' THEN 1.0
+                WHEN U.NextReview IS NULL OR julianday(U.NextReview) IS NULL THEN 1.0
+                WHEN julianday(U.NextReview) > julianday('now') THEN 0.0
+                WHEN julianday(U.NextReview) <= julianday(U.LastAnswer) THEN 1.0
+                ELSE 1.0 + log2(max(
+                    1.0,
+                    (julianday('now') - julianday(U.LastAnswer)) /
+                    (julianday(U.NextReview) - julianday(U.LastAnswer))
+                ))
+            END AS SelectionWeight
+        FROM subset AS S
+        LEFT JOIN UserProgress AS U
+            ON S.番号 = U.番号
+            AND U.Mode = '{3}'
+        ORDER BY S.番号";
+
     #region Properties
     public int Round
     {
@@ -178,7 +207,7 @@ public class GameManager : MonoBehaviour
             if (randomType == RandomType.FULLRANDOM)
                 LoadNextWordInTable();
             else
-                LoadNextWordByWeight(practiceType);
+                LoadNextReviewWord(practiceType);
             readyToNext = false;
         }
     }
@@ -254,7 +283,7 @@ public class GameManager : MonoBehaviour
     }
     void LoadUserProgress(int wordNumber)
     {
-        string mode = JpToCn ? "JpToCn" : "CnToJp";
+        string mode = GetCurrentProgressMode();
         string command = $@"
         SELECT *
         FROM UserProgress
@@ -267,131 +296,210 @@ public class GameManager : MonoBehaviour
             currentWordProgress = new UserProgress(wordNumber, mode);
     }
 
-    void LoadNextWordByWeight(string type)
+    void LoadNextReviewWord(string type)
     {
-        string whereClause = string.IsNullOrEmpty(type) || type == "ALL"
-                       ? ""
-                       : $"AND (タイプ = '{type}')";
-        string command = $@"
-            WITH subset AS (
-            SELECT *
-            FROM Vocabulary
-            WHERE 番号 BETWEEN {rangeMinNumber} AND {rangeMaxNumber}
-            {whereClause}
-            ORDER BY 番号     
-            )
-            SELECT S.*,
-            COALESCE(U.Proficiency, 0) AS Proficiency,
-            (0.5                                      -- 基底
-              * pow(0.5, COALESCE(U.Proficiency,0))  -- 熟練度
-              * CASE                                 -- 時間因子
-                  WHEN U.LastAnswer IS NULL THEN 1
-                  ELSE min(1,
-                      (julianday('now')-julianday(U.LastAnswer)) /
-                      (pow(2,COALESCE(U.Proficiency,0))))
-                END
-            ) AS SelectionWeight
-            FROM subset AS S
-            LEFT JOIN UserProgress AS U
-            ON S.番号 = U.番号
-            AND U.Mode = '{(JpToCn ? "JpToCn" : "CnToJp")}'
-            ORDER BY S.番号
-            ";
-
-        DataTable wordsInRange = db.GetTableFromSQLcommand(command);
-        if (wordsInRange.Rows.Count == 0)
+        DataTable candidates = LoadReviewCandidates(type);
+        if (!TrySelectReviewCandidate(candidates, out DataRow selectedRow))
         {
             Debug.LogWarning("No words found in the specified range and type.");
             return;
         }
-        DataRow row = SelectRowByWeight(wordsInRange);
-        RenderQuestions(row);
 
+        RenderReviewCandidate(selectedRow, type);
+    }
+
+    DataTable LoadReviewCandidates(string type)
+    {
+        string command = BuildReviewCandidateQuery(type);
+        return db.GetTableFromSQLcommand(command);
+    }
+
+    string BuildReviewCandidateQuery(string type)
+    {
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            ReviewCandidateQueryTemplate,
+            rangeMinNumber,
+            rangeMaxNumber,
+            BuildVocabularyTypeCondition(type),
+            GetCurrentProgressMode());
+    }
+
+    static string BuildVocabularyTypeCondition(string type)
+    {
+        return string.IsNullOrEmpty(type) || type == "ALL"
+            ? ""
+            : $"AND (タイプ = '{type}')";
+    }
+
+    string GetCurrentProgressMode()
+    {
+        return JpToCn ? "JpToCn" : "CnToJp";
+    }
+
+    static bool TrySelectReviewCandidate(DataTable candidates, out DataRow selectedRow)
+    {
+        selectedRow = null;
+        if (candidates.Rows.Count == 0)
+            return false;
+
+        selectedRow = SelectReviewCandidate(candidates);
+        return true;
+    }
+
+    void RenderReviewCandidate(DataRow row, string type)
+    {
+        RenderQuestions(row);
         RenderMultipleChoices(row, type, int.Parse(row["番号"].ToString()));
     }
 
-    DataRow SelectRowByWeight(DataTable candidates)
+    static DataRow SelectReviewCandidate(DataTable candidates)
     {
-        double[] weights = new double[candidates.Rows.Count];
+        double[] weights = ExtractSelectionWeights(candidates);
+        int selectedIndex = ResolveReviewCandidateIndex(candidates, weights);
+        return candidates.Rows[selectedIndex];
+    }
+
+    static double[] ExtractSelectionWeights(DataTable candidates)
+    {
+        var weights = new double[candidates.Rows.Count];
         for (int i = 0; i < candidates.Rows.Count; i++)
         {
             weights[i] = GetSelectionWeight(candidates.Rows[i]);
         }
 
+        return weights;
+    }
+
+    static int ResolveReviewCandidateIndex(DataTable candidates, IReadOnlyList<double> weights)
+    {
         int selectedIndex = SelectWeightedIndex(weights, UnityEngine.Random.value);
-        if (selectedIndex < 0)
+        if (selectedIndex >= 0)
+            return selectedIndex;
+
+        int closestReviewIndex = FindClosestReviewIndex(candidates);
+        return closestReviewIndex >= 0
+            ? closestReviewIndex
+            : UnityEngine.Random.Range(0, candidates.Rows.Count);
+    }
+
+    static int FindClosestReviewIndex(DataTable candidates)
+    {
+        int closestIndex = -1;
+        DateTimeOffset closestReview = DateTimeOffset.MaxValue;
+
+        for (int i = 0; i < candidates.Rows.Count; i++)
         {
-            selectedIndex = UnityEngine.Random.Range(0, candidates.Rows.Count);
+            if (!TryReadNextReview(candidates.Rows[i], out DateTimeOffset nextReview))
+                continue;
+
+            if (nextReview < closestReview)
+            {
+                closestReview = nextReview;
+                closestIndex = i;
+            }
         }
 
-        return candidates.Rows[selectedIndex];
+        return closestIndex;
+    }
+
+    static bool TryReadNextReview(DataRow row, out DateTimeOffset nextReview)
+    {
+        nextReview = default;
+        object rawValue = row["NextReview"];
+        if (IsMissingDatabaseValue(rawValue))
+            return false;
+
+        return DateTimeOffset.TryParse(
+            rawValue.ToString(),
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out nextReview);
     }
 
     static double GetSelectionWeight(DataRow row)
     {
-        object rawValue = row["SelectionWeight"];
-        if (rawValue == null || rawValue == DBNull.Value)
+        if (!TryReadDouble(row["SelectionWeight"], out double weight))
             return 0;
+
+        return IsValidSelectionWeight(weight) ? weight : 0;
+    }
+
+    static bool TryReadDouble(object rawValue, out double value)
+    {
+        value = 0;
+        if (IsMissingDatabaseValue(rawValue))
+            return false;
 
         string text = rawValue.ToString();
-        bool parsed = double.TryParse(
-            text,
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out double weight);
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+            || double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value);
+    }
 
-        if (!parsed)
-        {
-            parsed = double.TryParse(
-                text,
-                NumberStyles.Float,
-                CultureInfo.CurrentCulture,
-                out weight);
-        }
+    static bool IsMissingDatabaseValue(object value)
+    {
+        return value == null || value == DBNull.Value;
+    }
 
-        if (!parsed || weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight))
-            return 0;
-
-        return weight;
+    static bool IsValidSelectionWeight(double weight)
+    {
+        return weight > 0 && !double.IsNaN(weight) && !double.IsInfinity(weight);
     }
 
     internal static int SelectWeightedIndex(IReadOnlyList<double> weights, double normalizedRandomValue)
     {
-        double totalWeight = 0;
-        int lastPositiveIndex = -1;
+        if (!TrySummarizeWeights(weights, out double totalWeight, out int lastPositiveIndex))
+            return -1;
+
+        double target = NormalizeRandomValue(normalizedRandomValue) * totalWeight;
+        return FindCumulativeWeightIndex(weights, target, lastPositiveIndex);
+    }
+
+    static bool TrySummarizeWeights(
+        IReadOnlyList<double> weights,
+        out double totalWeight,
+        out int lastPositiveIndex)
+    {
+        totalWeight = 0;
+        lastPositiveIndex = -1;
 
         for (int i = 0; i < weights.Count; i++)
         {
-            double weight = weights[i];
-            if (weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight))
+            if (!IsValidSelectionWeight(weights[i]))
                 continue;
 
-            totalWeight += weight;
+            totalWeight += weights[i];
             lastPositiveIndex = i;
         }
 
-        if (lastPositiveIndex < 0 || totalWeight <= 0 || double.IsInfinity(totalWeight))
-            return -1;
+        return lastPositiveIndex >= 0 && !double.IsInfinity(totalWeight);
+    }
 
-        if (double.IsNaN(normalizedRandomValue))
-            normalizedRandomValue = 0;
+    static double NormalizeRandomValue(double value)
+    {
+        return double.IsNaN(value)
+            ? 0
+            : Math.Max(0, Math.Min(1, value));
+    }
 
-        normalizedRandomValue = Math.Max(0, Math.Min(1, normalizedRandomValue));
-        double target = normalizedRandomValue * totalWeight;
+    static int FindCumulativeWeightIndex(
+        IReadOnlyList<double> weights,
+        double target,
+        int fallbackIndex)
+    {
         double cumulativeWeight = 0;
 
         for (int i = 0; i < weights.Count; i++)
         {
-            double weight = weights[i];
-            if (weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight))
+            if (!IsValidSelectionWeight(weights[i]))
                 continue;
 
-            cumulativeWeight += weight;
+            cumulativeWeight += weights[i];
             if (target < cumulativeWeight)
                 return i;
         }
 
-        return lastPositiveIndex;
+        return fallbackIndex;
     }
 
     RandomType GetRandomType()
@@ -419,7 +527,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            LoadNextWordByWeight(practiceType);
+            LoadNextReviewWord(practiceType);
             roundText.gameObject.SetActive(false);
         }
     }
