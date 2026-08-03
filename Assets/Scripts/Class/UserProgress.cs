@@ -5,6 +5,8 @@ using UnityEngine;
 
 public class UserProgress
 {
+    const int IncorrectAnswerReviewDelayDays = 1;
+
     public int wordNumber;
     public int proficiency;
     public string lastAnswerTimestamp;
@@ -34,21 +36,33 @@ public class UserProgress
     }
     public void OnAnswer(bool isCorrect)
     {
+        UpdateAnswerStatistics(isCorrect);
+
+        DateTime answeredAt = DateTime.UtcNow;
+        lastAnswerTimestamp = answeredAt.ToString("o");
+        nextReviewTimestamp = answeredAt
+            .AddDays(GetReviewDelayDays(isCorrect))
+            .ToString("o");
+    }
+
+    void UpdateAnswerStatistics(bool isCorrect)
+    {
         if (isCorrect)
         {
             proficiency = Mathf.Min(proficiency + 1, 5);
             totalCorrect += 1;
+            return;
         }
-        else
-        {
-            proficiency = Mathf.Max(proficiency - 1, 0);
-            totalWrong += 1;
-        }
-        DateTime answeredAt = DateTime.UtcNow;
-        lastAnswerTimestamp = answeredAt.ToString("o");
-        nextReviewTimestamp = answeredAt
-            .AddDays(Math.Pow(2, proficiency))
-            .ToString("o");
+
+        proficiency = Mathf.Max(proficiency - 1, 0);
+        totalWrong += 1;
+    }
+
+    double GetReviewDelayDays(bool isCorrect)
+    {
+        return isCorrect
+            ? Math.Pow(2, proficiency)
+            : IncorrectAnswerReviewDelayDays;
     }
 
     public Dictionary<string, object> ToDictionary()

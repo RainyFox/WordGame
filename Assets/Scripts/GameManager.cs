@@ -42,6 +42,7 @@ public class GameManager : MonoBehaviour
     RandomType randomType;
     UserProgress currentWordProgress;
     bool JpToCn = true;
+    const double NewCandidateSelectionRate = 0.15;
     const string ReviewCandidateQueryTemplate = @"
         WITH subset AS (
             SELECT *
@@ -70,6 +71,12 @@ public class GameManager : MonoBehaviour
             ON S.番号 = U.番号
             AND U.Mode = '{3}'
         ORDER BY S.番号";
+
+    sealed class ReviewCandidatePools
+    {
+        public List<int> NewCandidateIndices { get; } = new List<int>();
+        public List<int> DueCandidateIndices { get; } = new List<int>();
+    }
 
     #region Properties
     public int Round
@@ -355,32 +362,146 @@ public class GameManager : MonoBehaviour
 
     static DataRow SelectReviewCandidate(DataTable candidates)
     {
-        double[] weights = ExtractSelectionWeights(candidates);
-        int selectedIndex = ResolveReviewCandidateIndex(candidates, weights);
+        int selectedIndex = SelectReviewCandidateIndex(
+            candidates,
+            UnityEngine.Random.value,
+            UnityEngine.Random.value);
         return candidates.Rows[selectedIndex];
     }
 
-    static double[] ExtractSelectionWeights(DataTable candidates)
+    internal static int SelectReviewCandidateIndex(
+        DataTable candidates,
+        double poolRandomValue,
+        double candidateRandomValue)
     {
-        var weights = new double[candidates.Rows.Count];
+        ReviewCandidatePools pools = GroupReviewCandidates(candidates);
+        if (TrySelectCandidateFromAvailablePools(
+            candidates,
+            pools,
+            poolRandomValue,
+            candidateRandomValue,
+            out int selectedIndex))
+        {
+            return selectedIndex;
+        }
+
+        return SelectFallbackCandidateIndex(candidates, candidateRandomValue);
+    }
+
+    static ReviewCandidatePools GroupReviewCandidates(DataTable candidates)
+    {
+        var pools = new ReviewCandidatePools();
+
         for (int i = 0; i < candidates.Rows.Count; i++)
         {
-            weights[i] = GetSelectionWeight(candidates.Rows[i]);
+            DataRow candidate = candidates.Rows[i];
+            if (IsNewCandidate(candidate))
+                pools.NewCandidateIndices.Add(i);
+            else if (IsDueCandidate(candidate))
+                pools.DueCandidateIndices.Add(i);
+        }
+
+        return pools;
+    }
+
+    static bool TrySelectCandidateFromAvailablePools(
+        DataTable candidates,
+        ReviewCandidatePools pools,
+        double poolRandomValue,
+        double candidateRandomValue,
+        out int selectedIndex)
+    {
+        if (ShouldSelectNewCandidate(pools, poolRandomValue))
+        {
+            selectedIndex = SelectUniformCandidateIndex(
+                pools.NewCandidateIndices,
+                candidateRandomValue);
+            return true;
+        }
+
+        if (pools.DueCandidateIndices.Count > 0)
+        {
+            selectedIndex = SelectWeightedCandidateIndex(
+                candidates,
+                pools.DueCandidateIndices,
+                candidateRandomValue);
+            return true;
+        }
+
+        selectedIndex = -1;
+        return false;
+    }
+
+    static bool ShouldSelectNewCandidate(
+        ReviewCandidatePools pools,
+        double poolRandomValue)
+    {
+        if (pools.NewCandidateIndices.Count == 0)
+            return false;
+
+        return pools.DueCandidateIndices.Count == 0
+            || NormalizeRandomValue(poolRandomValue) < NewCandidateSelectionRate;
+    }
+
+    static int SelectWeightedCandidateIndex(
+        DataTable candidates,
+        IReadOnlyList<int> candidateIndices,
+        double randomValue)
+    {
+        double[] weights = ExtractSelectionWeights(candidates, candidateIndices);
+        int poolIndex = SelectWeightedIndex(weights, randomValue);
+        return poolIndex >= 0
+            ? candidateIndices[poolIndex]
+            : SelectUniformCandidateIndex(candidateIndices, randomValue);
+    }
+
+    static double[] ExtractSelectionWeights(
+        DataTable candidates,
+        IReadOnlyList<int> candidateIndices)
+    {
+        var weights = new double[candidateIndices.Count];
+        for (int i = 0; i < candidateIndices.Count; i++)
+        {
+            weights[i] = GetSelectionWeight(candidates.Rows[candidateIndices[i]]);
         }
 
         return weights;
     }
 
-    static int ResolveReviewCandidateIndex(DataTable candidates, IReadOnlyList<double> weights)
+    static int SelectUniformCandidateIndex(
+        IReadOnlyList<int> candidateIndices,
+        double randomValue)
     {
-        int selectedIndex = SelectWeightedIndex(weights, UnityEngine.Random.value);
-        if (selectedIndex >= 0)
-            return selectedIndex;
+        int poolIndex = SelectUniformIndex(candidateIndices.Count, randomValue);
+        return candidateIndices[poolIndex];
+    }
 
+    static int SelectFallbackCandidateIndex(
+        DataTable candidates,
+        double randomValue)
+    {
         int closestReviewIndex = FindClosestReviewIndex(candidates);
         return closestReviewIndex >= 0
             ? closestReviewIndex
-            : UnityEngine.Random.Range(0, candidates.Rows.Count);
+            : SelectUniformIndex(candidates.Rows.Count, randomValue);
+    }
+
+    static int SelectUniformIndex(int count, double randomValue)
+    {
+        double normalizedValue = NormalizeRandomValue(randomValue);
+        return Math.Min((int)(normalizedValue * count), count - 1);
+    }
+
+    static bool IsNewCandidate(DataRow candidate)
+    {
+        object lastAnswer = candidate["LastAnswer"];
+        return IsMissingDatabaseValue(lastAnswer)
+            || string.IsNullOrWhiteSpace(lastAnswer.ToString());
+    }
+
+    static bool IsDueCandidate(DataRow candidate)
+    {
+        return GetSelectionWeight(candidate) > 0;
     }
 
     static int FindClosestReviewIndex(DataTable candidates)
