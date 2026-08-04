@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
@@ -20,7 +21,8 @@ public class GameManager : MonoBehaviour
     [SerializeField] TextMeshProUGUI numberText;
     [SerializeField] TextMeshProUGUI roundText;
     [SerializeField] TextMeshProUGUI questionText;
-    [SerializeField] TextMeshProUGUI spell;
+    [FormerlySerializedAs("spell")]
+    [SerializeField] TextMeshProUGUI answerText;
     [SerializeField] TextMeshProUGUI translate;
     [SerializeField] TextMeshProUGUI example;
     [SerializeField] TMP_InputField textInput;
@@ -43,6 +45,7 @@ public class GameManager : MonoBehaviour
     UserProgress currentWordProgress;
     bool JpToCn = true;
     const double NewCandidateSelectionRate = 0.15;
+    const string KanaColumnName = "かな";
     const string ReviewCandidateQueryTemplate = @"
         WITH subset AS (
             SELECT *
@@ -135,7 +138,7 @@ public class GameManager : MonoBehaviour
             textInput.ActivateInputField();
             return;
         }
-        if (textInput.text == spell.text)
+        if (textInput.text == answerText.text)
         {
             HandleCorrectAnswer();
         }
@@ -188,7 +191,7 @@ public class GameManager : MonoBehaviour
     }
     void ShowAnswer(bool show)
     {
-        spell.enabled = show;
+        answerText.enabled = show;
         translate.enabled = show;
         example.enabled = show;
     }
@@ -670,14 +673,14 @@ public class GameManager : MonoBehaviour
         if (JpToCn)
         {
             questionText.text = row["単語"].ToString();
-            spell.text = row["綴り"].ToString();
+            answerText.text = row[KanaColumnName].ToString();
             translate.text = row["中国語"].ToString();
         }
         else
         {
             questionText.text = row["中国語"].ToString();
-            spell.text = row["単語"].ToString();
-            translate.text = row["綴り"].ToString();
+            answerText.text = row["単語"].ToString();
+            translate.text = row[KanaColumnName].ToString();
         }
         SetExampleText(row);
     }
@@ -715,10 +718,10 @@ public class GameManager : MonoBehaviour
         DataTable distractors = GetDistractors(type, wordNumber);
 
 
-        choices[0] = answerRow[JpToCn ? "綴り" : "単語"].ToString();
+        choices[0] = answerRow[JpToCn ? KanaColumnName : "単語"].ToString();
         for (int i = 1; i < 4; i++)
         {
-            choices[i] = distractors.Rows[i - 1][JpToCn ? "綴り" : "単語"].ToString();
+            choices[i] = distractors.Rows[i - 1][JpToCn ? KanaColumnName : "単語"].ToString();
         }
         // Shuffle the choices
         var shuffled = choices.OrderBy(_ => UnityEngine.Random.value).ToArray();
@@ -733,7 +736,7 @@ public class GameManager : MonoBehaviour
                      ? $"WHERE 番号 <> {wordNumber}"
                      : $"WHERE タイプ = '{type}'  AND 番号 <> {wordNumber}";
         string command = $@"
-            SELECT 単語, 綴り
+            SELECT 単語, {KanaColumnName}
             FROM Vocabulary
             {whereClause}
             ORDER BY RANDOM()
