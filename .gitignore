@@ -65,3 +65,12 @@ crashlytics-build.properties
 
 # Accidental SQLite database filename
 /Data Source = WordGame.db
+
+# Web application build output
+/WebApp/**/[Bb]in/
+/WebApp/**/[Oo]bj/
+/WebApp/**/.vs/
+
+# Keep web application project definitions while ignoring Unity-generated ones
+!/WebApp/**/*.csproj
+!/WebApp/**/*.sln
