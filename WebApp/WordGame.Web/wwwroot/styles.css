@@ -1,0 +1,263 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  color: #1d2924;
+  background: #f1f3ed;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 12% 4%, rgba(213, 232, 190, 0.9), transparent 32rem),
+    radial-gradient(circle at 88% 90%, rgba(246, 202, 155, 0.55), transparent 28rem),
+    #f1f3ed;
+}
+
+button {
+  font: inherit;
+}
+
+.page-shell {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 72px 0 48px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+  gap: 64px;
+  align-items: end;
+}
+
+.eyebrow,
+.metric-label {
+  margin: 0;
+  color: #617066;
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  max-width: 780px;
+  margin: 16px 0 20px;
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  font-weight: 720;
+  letter-spacing: -0.055em;
+  line-height: 1.04;
+}
+
+.hero-copy {
+  max-width: 640px;
+  margin: 0;
+  color: #536159;
+  font-size: 1.04rem;
+  line-height: 1.8;
+}
+
+.status-card,
+.metric-card,
+.detail-card,
+.next-step-card {
+  border: 1px solid rgba(44, 61, 52, 0.12);
+  border-radius: 24px;
+  box-shadow: 0 18px 48px rgba(44, 61, 52, 0.08);
+}
+
+.status-card {
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.64);
+  backdrop-filter: blur(14px);
+}
+
+.status-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-weight: 700;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #7e8b83;
+}
+
+.status-dot--loading {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.status-dot--ok {
+  background: #2e8b57;
+  box-shadow: 0 0 0 5px rgba(46, 139, 87, 0.13);
+}
+
+.status-dot--error {
+  background: #bd4a3f;
+  box-shadow: 0 0 0 5px rgba(189, 74, 63, 0.13);
+}
+
+.status-message {
+  min-height: 3em;
+  margin: 16px 0 0;
+  color: #617066;
+  line-height: 1.55;
+}
+
+.secondary-button {
+  margin-top: 16px;
+  padding: 9px 14px;
+  border: 1px solid #8a978f;
+  border-radius: 999px;
+  color: #26342d;
+  background: transparent;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: rgba(38, 52, 45, 0.07);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 0.7fr 1.3fr;
+  gap: 20px;
+  margin-top: 56px;
+}
+
+.metric-card,
+.detail-card {
+  min-height: 190px;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.metric-card {
+  color: #f7f8f4;
+  background: #263a30;
+}
+
+.metric-card .metric-label {
+  color: #c8d7ce;
+}
+
+.metric-value {
+  margin: 20px 0 0;
+  font-size: clamp(3.2rem, 8vw, 5.2rem);
+  font-weight: 720;
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+}
+
+.metric-caption {
+  margin: 12px 0 0;
+  color: #c8d7ce;
+}
+
+.detail-card--wide {
+  grid-column: 1 / -1;
+  min-height: auto;
+}
+
+.type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.type-chip,
+.type-placeholder {
+  padding: 9px 13px;
+  border-radius: 999px;
+  color: #34443b;
+  background: #e5eae2;
+  font-size: 0.9rem;
+}
+
+.database-path {
+  display: block;
+  margin-top: 22px;
+  overflow-wrap: anywhere;
+  color: #425149;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  line-height: 1.6;
+}
+
+.next-step-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  align-items: center;
+  margin-top: 20px;
+  padding: 30px;
+  background: #f3d7b4;
+}
+
+.next-step-card h2 {
+  margin: 8px 0 8px;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  letter-spacing: -0.025em;
+}
+
+.next-step-card p:last-child {
+  margin: 0;
+  color: #66594a;
+}
+
+.read-only-badge {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border: 1px solid rgba(73, 60, 45, 0.28);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media (max-width: 760px) {
+  .page-shell {
+    width: min(100% - 28px, 640px);
+    padding-top: 40px;
+  }
+
+  .hero,
+  .summary-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .status-card {
+    margin-top: 12px;
+  }
+
+  .detail-card--wide {
+    grid-column: auto;
+  }
+
+  .next-step-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--loading {
+    animation: none;
+  }
+}

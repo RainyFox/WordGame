@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="WordGame 瀏覽器練習工具">
+  <title>WordGame Web</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">WORDGAME WEB · PHASE 1</p>
+        <h1>讓單字練習離開 Unity，<br>從可靠的資料連線開始。</h1>
+        <p class="hero-copy">
+          目前頁面只以唯讀模式檢查專案根目錄的 WordGame.db，
+          不會修改 Vocabulary 或 UserProgress。
+        </p>
+      </div>
+      <div class="status-card" aria-live="polite">
+        <div class="status-heading">
+          <span id="statusDot" class="status-dot status-dot--loading"></span>
+          <span id="statusLabel">正在連接資料庫</span>
+        </div>
+        <p id="statusMessage" class="status-message">請稍候……</p>
+        <button id="retryButton" class="secondary-button" type="button" hidden>
+          重新檢查
+        </button>
+      </div>
+    </header>
+
+    <section class="summary-grid" aria-label="資料庫摘要">
+      <article class="metric-card">
+        <p class="metric-label">Vocabulary</p>
+        <p id="vocabularyCount" class="metric-value">—</p>
+        <p class="metric-caption">目前可用單字</p>
+      </article>
+
+      <article class="detail-card">
+        <p class="metric-label">可用類型</p>
+        <div id="typeList" class="type-list">
+          <span class="type-placeholder">載入中</span>
+        </div>
+      </article>
+
+      <article class="detail-card detail-card--wide">
+        <p class="metric-label">唯讀資料來源</p>
+        <code id="databasePath" class="database-path">正在解析路徑……</code>
+      </article>
+    </section>
+
+    <section class="next-step-card">
+      <div>
+        <p class="eyebrow">NEXT</p>
+        <h2>下一階段：完全隨機練習</h2>
+        <p>加入番号範圍、單字類型、翻譯方向與基本答題流程。</p>
+      </div>
+      <span class="read-only-badge">READ ONLY</span>
+    </section>
+  </main>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

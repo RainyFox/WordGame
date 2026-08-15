@@ -20,6 +20,26 @@ It is kept outside `Assets` so Unity does not import or compile the web project.
 
 ## Current status
 
-Only the directory structure has been prepared. The machine currently has a
-.NET runtime but no .NET SDK, so the ASP.NET Core project will be scaffolded
-after a compatible SDK is installed.
+Phase 1 provides a read-only ASP.NET Core application that:
+
+- binds to `http://127.0.0.1:5276`;
+- resolves the project-root `WordGame.db`;
+- reports database health through `/api/health`;
+- reports vocabulary count and types through `/api/vocabulary/summary`;
+- serves a browser status page from `WordGame.Web/wwwroot`.
+
+## Development
+
+Requirements: .NET 10 SDK.
+
+Run the application:
+
+```powershell
+dotnet run --project WebApp/WordGame.Web/WordGame.Web.csproj
+```
+
+Run all tests:
+
+```powershell
+dotnet test WebApp/WordGame.Web.sln
+```
