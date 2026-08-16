@@ -209,7 +209,7 @@ h1 {
   letter-spacing: -0.035em;
 }
 
-.read-only-badge,
+.progress-badge,
 .direction-label {
   flex: 0 0 auto;
   padding: 8px 11px;
@@ -219,9 +219,9 @@ h1 {
   letter-spacing: 0.1em;
 }
 
-.read-only-badge {
-  color: #516058;
-  background: #e5eae3;
+.progress-badge {
+  color: #684d2f;
+  background: #f3d7b4;
 }
 
 .form-section {
@@ -285,24 +285,24 @@ select:focus {
   box-shadow: 0 0 0 4px rgba(85, 121, 99, 0.12);
 }
 
-.direction-options {
+.choice-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.direction-option {
+.choice-option {
   position: relative;
 }
 
-.direction-option input {
+.choice-option input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
 }
 
-.direction-option span {
+.choice-option span {
   display: block;
   min-height: 82px;
   padding: 15px;
@@ -312,29 +312,29 @@ select:focus {
   cursor: pointer;
 }
 
-.direction-option strong,
-.direction-option small {
+.choice-option strong,
+.choice-option small {
   display: block;
 }
 
-.direction-option strong {
+.choice-option strong {
   font-size: 0.9rem;
 }
 
-.direction-option small {
+.choice-option small {
   margin-top: 6px;
   color: #758078;
   font-size: 0.72rem;
   line-height: 1.4;
 }
 
-.direction-option input:checked + span {
+.choice-option input:checked + span {
   border-color: #3c634d;
   background: #e5efe7;
   box-shadow: inset 0 0 0 1px #3c634d;
 }
 
-.direction-option input:focus-visible + span {
+.choice-option input:focus-visible + span {
   outline: 3px solid rgba(85, 121, 99, 0.22);
   outline-offset: 2px;
 }
@@ -494,6 +494,10 @@ select:focus {
   color: #b33f35;
 }
 
+.answer-feedback--partial {
+  color: #9a651f;
+}
+
 .reveal-panel {
   max-width: 620px;
   margin: 24px auto 0;
@@ -508,7 +512,7 @@ select:focus {
   margin: 0;
 }
 
-.reveal-panel div {
+.reveal-panel dl > div {
   display: grid;
   grid-template-columns: 72px 1fr;
   gap: 14px;
@@ -523,6 +527,23 @@ select:focus {
   margin: 0;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.progress-result {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #d6ddd7;
+  flex-wrap: wrap;
+}
+
+.progress-result span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: #526158;
+  background: #dfe7df;
+  font-size: 0.75rem;
 }
 
 .question-actions {
@@ -586,7 +607,7 @@ select:focus {
     font-size: 1.35rem;
   }
 
-  .read-only-badge {
+  .progress-badge {
     padding: 7px 9px;
     font-size: 0.6rem;
   }
@@ -604,11 +625,11 @@ select:focus {
     padding: 23px;
   }
 
-  .direction-options {
+  .choice-options {
     grid-template-columns: 1fr;
   }
 
-  .direction-option span {
+  .choice-option span {
     min-height: auto;
   }
 

@@ -21,5 +21,7 @@ public interface IPracticeSessionService
         Guid sessionId,
         CancellationToken cancellationToken);
 
-    void End(Guid sessionId);
+    Task EndAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken);
 }

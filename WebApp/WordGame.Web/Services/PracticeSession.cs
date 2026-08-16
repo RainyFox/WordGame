@@ -2,34 +2,55 @@ using WordGame.Web.Models;
 
 namespace WordGame.Web.Services;
 
-internal sealed class PracticeSession(
-    PracticeDirection direction,
-    IReadOnlyList<int> candidateNumbers)
+internal sealed class PracticeSession
 {
     readonly object syncRoot = new();
-    readonly List<int> candidateNumbers = [.. candidateNumbers];
-    int nextIndex = candidateNumbers.Count;
-    int round;
+    readonly FullRandomQuestionDeck? fullRandomDeck;
     int? currentNumber;
-    bool currentAnswerRevealed = true;
+    bool currentQuestionCompleted = true;
+    bool hadWrongAttempt;
+    bool settlementInProgress;
 
-    public PracticeDirection Direction { get; } = direction;
+    public PracticeSession(
+        StartPracticeRequest request,
+        VocabularyFilter filter,
+        IReadOnlyList<int>? fullRandomCandidates,
+        IRandomSource randomSource)
+    {
+        Direction = request.Direction;
+        Mode = request.Mode;
+        Filter = filter;
+        if (fullRandomCandidates is not null)
+            fullRandomDeck = new FullRandomQuestionDeck(fullRandomCandidates, randomSource);
+    }
 
-    public PracticeQuestionPosition MoveToNextQuestion()
+    public PracticeDirection Direction { get; }
+
+    public PracticeMode Mode { get; }
+
+    public VocabularyFilter Filter { get; }
+
+    public PracticeQuestionPosition BeginNextFullRandomQuestion()
     {
         lock (syncRoot)
         {
             EnsureReadyForNextQuestion();
-            StartNextRoundIfNeeded();
+            PracticeQuestionPosition position = fullRandomDeck?.MoveToNextQuestion()
+                ?? throw new PracticeStateException("完全隨機題組尚未建立。");
+            BeginQuestion(position.Number);
+            return position;
+        }
+    }
 
-            currentNumber = candidateNumbers[nextIndex];
-            currentAnswerRevealed = false;
-            nextIndex++;
-            return new PracticeQuestionPosition(
-                currentNumber.Value,
-                round,
-                nextIndex,
-                candidateNumbers.Count);
+    public PracticeQuestionPosition BeginNextProficiencyQuestion(
+        int number,
+        int candidateCount)
+    {
+        lock (syncRoot)
+        {
+            EnsureReadyForNextQuestion();
+            BeginQuestion(number);
+            return new PracticeQuestionPosition(number, 0, 0, candidateCount);
         }
     }
 
@@ -37,46 +58,102 @@ internal sealed class PracticeSession(
     {
         lock (syncRoot)
         {
-            if (!currentNumber.HasValue || currentAnswerRevealed)
-                throw new PracticeStateException("目前沒有等待作答的題目。");
-            return currentNumber.Value;
+            EnsureCurrentQuestionCanChange();
+            return currentNumber!.Value;
         }
     }
 
-    public void MarkCurrentQuestionAnswered(int expectedNumber)
+    public void RegisterWrongAttempt(int expectedNumber)
     {
         lock (syncRoot)
         {
-            if (currentNumber != expectedNumber || currentAnswerRevealed)
-                throw new PracticeStateException("題目狀態已變更，請重新載入。");
-            currentAnswerRevealed = true;
+            EnsureExpectedQuestionCanChange(expectedNumber);
+            hadWrongAttempt = true;
         }
+    }
+
+    public PracticeSettlement BeginSettlement(
+        int expectedNumber,
+        bool currentAnswerIsCorrect)
+    {
+        lock (syncRoot)
+        {
+            EnsureExpectedQuestionCanChange(expectedNumber);
+            settlementInProgress = true;
+            PracticeOutcome outcome = currentAnswerIsCorrect && !hadWrongAttempt
+                ? PracticeOutcome.Correct
+                : PracticeOutcome.Wrong;
+            return new PracticeSettlement(expectedNumber, outcome);
+        }
+    }
+
+    public PracticeSettlement? BeginAbandonmentSettlement()
+    {
+        lock (syncRoot)
+        {
+            if (!currentNumber.HasValue || currentQuestionCompleted || !hadWrongAttempt)
+                return null;
+
+            EnsureCurrentQuestionCanChange();
+            settlementInProgress = true;
+            return new PracticeSettlement(currentNumber.Value, PracticeOutcome.Wrong);
+        }
+    }
+
+    public void CompleteSettlement(int expectedNumber)
+    {
+        lock (syncRoot)
+        {
+            EnsureSettlementMatches(expectedNumber);
+            settlementInProgress = false;
+            currentQuestionCompleted = true;
+        }
+    }
+
+    public void CancelSettlement(int expectedNumber)
+    {
+        lock (syncRoot)
+        {
+            EnsureSettlementMatches(expectedNumber);
+            settlementInProgress = false;
+        }
+    }
+
+    void BeginQuestion(int number)
+    {
+        currentNumber = number;
+        currentQuestionCompleted = false;
+        hadWrongAttempt = false;
+        settlementInProgress = false;
     }
 
     void EnsureReadyForNextQuestion()
     {
-        if (currentNumber.HasValue && !currentAnswerRevealed)
+        if (settlementInProgress)
+            throw new PracticeStateException("正在儲存目前題目的結果。");
+        if (currentNumber.HasValue && !currentQuestionCompleted)
             throw new PracticeStateException("請先答對或顯示目前題目的答案。");
     }
 
-    void StartNextRoundIfNeeded()
+    void EnsureExpectedQuestionCanChange(int expectedNumber)
     {
-        if (nextIndex < candidateNumbers.Count)
-            return;
-
-        Shuffle(candidateNumbers);
-        nextIndex = 0;
-        round++;
+        EnsureCurrentQuestionCanChange();
+        if (currentNumber != expectedNumber)
+            throw new PracticeStateException("題目狀態已變更，請重新載入。");
     }
 
-    static void Shuffle(IList<int> numbers)
+    void EnsureCurrentQuestionCanChange()
     {
-        for (int index = numbers.Count - 1; index > 0; index--)
-        {
-            int swapIndex = Random.Shared.Next(index + 1);
-            (numbers[index], numbers[swapIndex]) =
-                (numbers[swapIndex], numbers[index]);
-        }
+        if (!currentNumber.HasValue || currentQuestionCompleted)
+            throw new PracticeStateException("目前沒有等待作答的題目。");
+        if (settlementInProgress)
+            throw new PracticeStateException("正在儲存目前題目的結果。");
+    }
+
+    void EnsureSettlementMatches(int expectedNumber)
+    {
+        if (!settlementInProgress || currentNumber != expectedNumber)
+            throw new PracticeStateException("題目結算狀態已變更。");
     }
 }
 
@@ -85,3 +162,7 @@ internal sealed record PracticeQuestionPosition(
     int Round,
     int Position,
     int Total);
+
+internal sealed record PracticeSettlement(
+    int Number,
+    PracticeOutcome Outcome);

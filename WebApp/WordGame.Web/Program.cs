@@ -12,9 +12,14 @@ builder.Services.Configure<WordGameDatabaseOptions>(
 builder.Services.AddSingleton<IWordGameDatabasePathResolver, WordGameDatabasePathResolver>();
 builder.Services.AddSingleton<IReadOnlyWordGameConnectionFactory,
     SqliteReadOnlyWordGameConnectionFactory>();
+builder.Services.AddSingleton<IReadWriteWordGameConnectionFactory,
+    SqliteReadWriteWordGameConnectionFactory>();
 builder.Services.AddSingleton<IVocabularyReadRepository, SqliteVocabularyReadRepository>();
 builder.Services.AddSingleton<IPracticeVocabularyRepository,
     SqlitePracticeVocabularyRepository>();
+builder.Services.AddSingleton<IUserProgressRepository, SqliteUserProgressRepository>();
+builder.Services.AddSingleton<IRandomSource, SystemRandomSource>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IPracticeSessionService, PracticeSessionService>();
 

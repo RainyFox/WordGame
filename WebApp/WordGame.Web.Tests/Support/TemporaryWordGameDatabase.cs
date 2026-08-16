@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
+using WordGame.Web.Models;
 
 namespace WordGame.Web.Tests.Support;
 
@@ -22,6 +23,37 @@ internal sealed class TemporaryWordGameDatabase : IDisposable
     public byte[] ComputeHash()
     {
         return SHA256.HashData(File.ReadAllBytes(DatabasePath));
+    }
+
+    public StoredProgressRow? ReadProgress(
+        int number,
+        PracticeDirection direction)
+    {
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = DatabasePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false
+        };
+        using var connection = new SqliteConnection(connectionString.ToString());
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT Proficiency, LastAnswer, NextReview, TotalCorrect, TotalWrong
+            FROM UserProgress
+            WHERE 番号 = $number AND Mode = $mode
+            """;
+        command.Parameters.AddWithValue("$number", number);
+        command.Parameters.AddWithValue("$mode", direction.ToString());
+        using SqliteDataReader reader = command.ExecuteReader();
+        return reader.Read()
+            ? new StoredProgressRow(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4))
+            : null;
     }
 
     public void Dispose()
@@ -75,3 +107,10 @@ internal sealed class TemporaryWordGameDatabase : IDisposable
         command.ExecuteNonQuery();
     }
 }
+
+internal sealed record StoredProgressRow(
+    int Proficiency,
+    string LastAnswer,
+    string NextReview,
+    int TotalCorrect,
+    int TotalWrong);

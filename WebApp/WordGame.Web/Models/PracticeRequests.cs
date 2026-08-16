@@ -4,6 +4,7 @@ public sealed record StartPracticeRequest(
     int MinNumber,
     int MaxNumber,
     string? Type,
+    PracticeMode Mode,
     PracticeDirection Direction);
 
 public sealed record SubmitPracticeAnswerRequest(string? Answer);

@@ -12,15 +12,25 @@ public sealed record StartPracticeResponse(
 public sealed record PracticeQuestionResponse(
     int Number,
     string Prompt,
+    PracticeMode Mode,
     int Round,
     int Position,
     int Total);
 
 public sealed record PracticeAnswerResponse(
     bool IsCorrect,
-    PracticeRevealResponse? Reveal);
+    PracticeOutcome? RecordedOutcome,
+    PracticeRevealResponse? Reveal,
+    UserProgressResponse? Progress);
 
 public sealed record PracticeRevealResponse(
     string Answer,
     string Translation,
     string Example);
+
+public sealed record UserProgressResponse(
+    int Proficiency,
+    DateTimeOffset LastAnswer,
+    DateTimeOffset NextReview,
+    int TotalCorrect,
+    int TotalWrong);

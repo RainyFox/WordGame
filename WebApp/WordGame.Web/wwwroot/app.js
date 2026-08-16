@@ -12,9 +12,13 @@ const elements = {
   startButton: document.querySelector("#startButton"),
   practiceView: document.querySelector("#practiceView"),
   endSessionButton: document.querySelector("#endSessionButton"),
+  roundProgress: document.querySelector("#roundProgress"),
   roundNumber: document.querySelector("#roundNumber"),
+  positionProgress: document.querySelector("#positionProgress"),
   questionPosition: document.querySelector("#questionPosition"),
   questionTotal: document.querySelector("#questionTotal"),
+  reviewProgress: document.querySelector("#reviewProgress"),
+  reviewCandidateCount: document.querySelector("#reviewCandidateCount"),
   directionLabel: document.querySelector("#directionLabel"),
   questionNumber: document.querySelector("#questionNumber"),
   questionPrompt: document.querySelector("#questionPrompt"),
@@ -28,12 +32,15 @@ const elements = {
   revealedTranslation: document.querySelector("#revealedTranslation"),
   exampleRow: document.querySelector("#exampleRow"),
   revealedExample: document.querySelector("#revealedExample"),
+  resultProficiency: document.querySelector("#resultProficiency"),
+  resultNextReview: document.querySelector("#resultNextReview"),
   revealButton: document.querySelector("#revealButton"),
   nextButton: document.querySelector("#nextButton")
 };
 
 const state = {
   sessionId: null,
+  mode: "FullRandom",
   direction: "JpToCn",
   readyForNext: false,
   composingAnswer: false
@@ -124,6 +131,7 @@ async function startPractice(event) {
       body: JSON.stringify(request)
     });
     state.sessionId = response.sessionId;
+    state.mode = request.mode;
     state.direction = request.direction;
     showPracticeView();
     renderQuestion(response.question);
@@ -150,6 +158,7 @@ function readPracticeSettings() {
     minNumber,
     maxNumber,
     type: elements.vocabularyType.value || null,
+    mode: new FormData(elements.setupForm).get("mode"),
     direction: new FormData(elements.setupForm).get("direction")
   };
 }
@@ -162,9 +171,8 @@ function showPracticeView() {
 
 function renderQuestion(question) {
   state.readyForNext = false;
-  elements.roundNumber.textContent = question.round;
-  elements.questionPosition.textContent = question.position;
-  elements.questionTotal.textContent = question.total;
+  state.mode = question.mode;
+  renderQuestionProgress(question);
   elements.questionNumber.textContent = question.number;
   elements.questionPrompt.textContent = question.prompt;
   elements.directionLabel.textContent = state.direction === "JpToCn"
@@ -194,7 +202,7 @@ async function submitAnswer(event) {
 
   const answer = elements.answerInput.value.trim();
   if (!answer) {
-    showAnswerFeedback("請先輸入答案，或選擇「不知道」。", false);
+    showAnswerFeedback("請先輸入答案，或選擇「不知道」。", "wrong");
     elements.answerInput.focus();
     return;
   }
@@ -206,14 +214,14 @@ async function submitAnswer(event) {
       body: JSON.stringify({ answer })
     });
     if (result.isCorrect) {
-      showReveal(result.reveal, true);
+      showReveal(result);
       return;
     }
 
-    showAnswerFeedback("不對，再想一下。", false);
+    showAnswerFeedback("不對，再想一下。", "wrong");
     elements.answerInput.select();
   } catch (error) {
-    showAnswerFeedback(error.message, false);
+    showAnswerFeedback(error.message, "wrong");
   } finally {
     if (!state.readyForNext)
       setAnswerControlsDisabled(false);
@@ -225,21 +233,24 @@ async function revealAnswer() {
   elements.revealButton.disabled = true;
   try {
     const result = await fetchJson(sessionUrl("reveal"), { method: "POST" });
-    showReveal(result.reveal, false);
+    showReveal(result);
   } catch (error) {
-    showAnswerFeedback(error.message, false);
+    showAnswerFeedback(error.message, "wrong");
     setAnswerControlsDisabled(false);
     elements.revealButton.disabled = false;
   }
 }
 
-function showReveal(reveal, isCorrect) {
+function showReveal(result) {
   state.readyForNext = true;
-  showAnswerFeedback(isCorrect ? "答對了。" : "答案如下。", isCorrect);
+  showRecordedOutcome(result);
+  const reveal = result.reveal;
   elements.revealedAnswer.textContent = reveal.answer;
   elements.revealedTranslation.textContent = reveal.translation;
   elements.revealedExample.textContent = reveal.example;
   elements.exampleRow.hidden = !reveal.example;
+  elements.resultProficiency.textContent = result.progress.proficiency;
+  elements.resultNextReview.textContent = formatNextReview(result.progress.nextReview);
   elements.revealPanel.hidden = false;
   elements.answerInput.disabled = true;
   elements.submitAnswerButton.disabled = true;
@@ -248,11 +259,47 @@ function showReveal(reveal, isCorrect) {
   elements.nextButton.focus();
 }
 
-function showAnswerFeedback(message, isCorrect) {
+function renderQuestionProgress(question) {
+  const isFullRandom = question.mode === "FullRandom";
+  elements.roundProgress.hidden = !isFullRandom;
+  elements.positionProgress.hidden = !isFullRandom;
+  elements.reviewProgress.hidden = isFullRandom;
+
+  if (isFullRandom) {
+    elements.roundNumber.textContent = question.round;
+    elements.questionPosition.textContent = question.position;
+    elements.questionTotal.textContent = question.total;
+    return;
+  }
+
+  elements.reviewCandidateCount.textContent = numberFormatter.format(question.total);
+}
+
+function showRecordedOutcome(result) {
+  if (result.recordedOutcome === "Correct") {
+    showAnswerFeedback("答對了，已記錄為正確。", "correct");
+    return;
+  }
+
+  if (result.isCorrect) {
+    showAnswerFeedback("這次答對了；本題依第一次作答記錄為錯誤。", "partial");
+    return;
+  }
+
+  showAnswerFeedback("已顯示答案，本題記錄為錯誤。", "wrong");
+}
+
+function formatNextReview(timestamp) {
+  return new Intl.DateTimeFormat("zh-TW", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric"
+  }).format(new Date(timestamp));
+}
+
+function showAnswerFeedback(message, tone) {
   elements.answerFeedback.textContent = message;
-  elements.answerFeedback.className = isCorrect
-    ? "answer-feedback answer-feedback--correct"
-    : "answer-feedback answer-feedback--wrong";
+  elements.answerFeedback.className = `answer-feedback answer-feedback--${tone}`;
 }
 
 async function loadNextQuestion() {
@@ -261,22 +308,28 @@ async function loadNextQuestion() {
     const question = await fetchJson(sessionUrl("next"), { method: "POST" });
     renderQuestion(question);
   } catch (error) {
-    showAnswerFeedback(error.message, false);
+    showAnswerFeedback(error.message, "wrong");
     elements.nextButton.disabled = false;
   }
 }
 
 async function endPractice() {
   const sessionId = state.sessionId;
-  state.sessionId = null;
-  state.readyForNext = false;
-  elements.practiceView.hidden = true;
-  elements.setupView.hidden = false;
-
-  if (sessionId) {
-    await fetchJson(`/api/practice/sessions/${sessionId}`, {
-      method: "DELETE"
-    }).catch(() => null);
+  elements.endSessionButton.disabled = true;
+  try {
+    if (sessionId) {
+      await fetchJson(`/api/practice/sessions/${sessionId}`, {
+        method: "DELETE"
+      });
+    }
+    state.sessionId = null;
+    state.readyForNext = false;
+    elements.practiceView.hidden = true;
+    elements.setupView.hidden = false;
+  } catch (error) {
+    showAnswerFeedback(error.message, "wrong");
+  } finally {
+    elements.endSessionButton.disabled = false;
   }
 }
 
@@ -311,6 +364,25 @@ function hideSetupError() {
   elements.setupError.textContent = "";
 }
 
+function updateStartButtonLabel() {
+  const mode = new FormData(elements.setupForm).get("mode");
+  elements.startButton.textContent = mode === "Proficiency"
+    ? "開始熟練度複習"
+    : "開始完全隨機練習";
+}
+
+function abandonSessionOnPageHide() {
+  const sessionId = state.sessionId;
+  if (!sessionId)
+    return;
+
+  state.sessionId = null;
+  fetch(`/api/practice/sessions/${sessionId}`, {
+    method: "DELETE",
+    keepalive: true
+  }).catch(() => null);
+}
+
 elements.setupForm.addEventListener("submit", startPractice);
 elements.answerForm.addEventListener("submit", submitAnswer);
 elements.answerInput.addEventListener("compositionstart", () => {
@@ -322,7 +394,11 @@ elements.answerInput.addEventListener("compositionend", () => {
 elements.revealButton.addEventListener("click", revealAnswer);
 elements.nextButton.addEventListener("click", loadNextQuestion);
 elements.endSessionButton.addEventListener("click", endPractice);
+document.querySelectorAll('input[name="mode"]').forEach(input => {
+  input.addEventListener("change", updateStartButtonLabel);
+});
 document.addEventListener("keydown", handleEnterShortcut);
+window.addEventListener("pagehide", abandonSessionOnPageHide);
 
 function handleEnterShortcut(event) {
   if (event.key !== "Enter" || event.repeat || state.composingAnswer)

@@ -26,11 +26,11 @@
   <main class="app-shell">
     <section id="setupView" class="setup-layout">
       <div class="intro-panel">
-        <p class="eyebrow">PHASE 2 · FULL RANDOM</p>
-        <h1>選好今天的範圍，<br>開始不重複的練習。</h1>
+        <p class="eyebrow">PHASE 4 · SCHEDULED REVIEW</p>
+        <h1>選好練習方式，<br>讓每次作答留下進度。</h1>
         <p class="intro-copy">
-          每輪會先把符合條件的単語隨機洗牌，全部練過後才開始下一輪。
-          這個階段仍然只讀取資料庫，不會更新熟練度。
+          完全隨機模式會維持輪內不重複；熟練度複習則優先安排新題與到期題。
+          每題只結算一次，並分別保存兩個出題方向的熟練度。
         </p>
 
         <dl class="database-summary">
@@ -51,7 +51,7 @@
             <p class="step-label">01</p>
             <h2>設定練習內容</h2>
           </div>
-          <span class="read-only-badge">READ ONLY</span>
+          <span class="progress-badge">PROGRESS ON</span>
         </div>
 
         <fieldset class="form-section">
@@ -77,16 +77,36 @@
         </label>
 
         <fieldset class="form-section">
+          <legend>練習模式</legend>
+          <div class="choice-options">
+            <label class="choice-option">
+              <input type="radio" name="mode" value="FullRandom" checked>
+              <span>
+                <strong>完全隨機</strong>
+                <small>每輪洗牌，輪內不重複</small>
+              </span>
+            </label>
+            <label class="choice-option">
+              <input type="radio" name="mode" value="Proficiency">
+              <span>
+                <strong>熟練度複習</strong>
+                <small>新題 15%，其餘依到期日與逾期權重出題</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
           <legend>出題方向</legend>
-          <div class="direction-options">
-            <label class="direction-option">
+          <div class="choice-options">
+            <label class="choice-option">
               <input type="radio" name="direction" value="JpToCn" checked>
               <span>
                 <strong>日文 → 讀音</strong>
                 <small>看到単語，輸入かな</small>
               </span>
             </label>
-            <label class="direction-option">
+            <label class="choice-option">
               <input type="radio" name="direction" value="CnToJp">
               <span>
                 <strong>中文 → 日文</strong>
@@ -107,8 +127,9 @@
       <div class="practice-toolbar">
         <button id="endSessionButton" class="text-button" type="button">← 返回設定</button>
         <div class="practice-progress" aria-label="目前進度">
-          <span>第 <strong id="roundNumber">1</strong> 輪</span>
-          <span><strong id="questionPosition">1</strong> / <strong id="questionTotal">—</strong></span>
+          <span id="roundProgress">第 <strong id="roundNumber">1</strong> 輪</span>
+          <span id="positionProgress"><strong id="questionPosition">1</strong> / <strong id="questionTotal">—</strong></span>
+          <span id="reviewProgress" hidden>熟練度複習 · <strong id="reviewCandidateCount">—</strong> 筆候選</span>
         </div>
       </div>
 
@@ -156,6 +177,10 @@
               <dd id="revealedExample">—</dd>
             </div>
           </dl>
+          <div class="progress-result">
+            <span>熟練度 <strong id="resultProficiency">—</strong> / 5</span>
+            <span>下次複習 <strong id="resultNextReview">—</strong></span>
+          </div>
         </section>
 
         <div class="question-actions">

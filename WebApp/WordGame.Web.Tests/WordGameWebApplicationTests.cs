@@ -46,7 +46,8 @@ public sealed class WordGameWebApplicationTests
             CancellationToken.None);
 
         Assert.Contains("WordGame Web", html, StringComparison.Ordinal);
-        Assert.Contains("READ ONLY", html, StringComparison.Ordinal);
+        Assert.Contains("PHASE 4 · SCHEDULED REVIEW", html, StringComparison.Ordinal);
+        Assert.Contains("PROGRESS ON", html, StringComparison.Ordinal);
     }
 
     [Fact]

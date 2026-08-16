@@ -101,12 +101,20 @@ public static class PracticeEndpoints
         }
     }
 
-    static IResult EndSession(
+    static async Task<IResult> EndSession(
         Guid sessionId,
-        IPracticeSessionService service)
+        IPracticeSessionService service,
+        CancellationToken cancellationToken)
     {
-        service.End(sessionId);
-        return Results.NoContent();
+        try
+        {
+            await service.EndAsync(sessionId, cancellationToken);
+            return Results.NoContent();
+        }
+        catch (Exception exception)
+        {
+            return MapException(exception);
+        }
     }
 
     static IResult MapException(Exception exception)

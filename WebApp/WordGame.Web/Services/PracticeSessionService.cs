@@ -5,7 +5,10 @@ using WordGame.Web.Models;
 namespace WordGame.Web.Services;
 
 public sealed class PracticeSessionService(
-    IPracticeVocabularyRepository repository,
+    IPracticeVocabularyRepository vocabularyRepository,
+    IUserProgressRepository progressRepository,
+    IRandomSource randomSource,
+    TimeProvider timeProvider,
     IMemoryCache cache) : IPracticeSessionService
 {
     static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(8);
@@ -15,19 +18,29 @@ public sealed class PracticeSessionService(
         CancellationToken cancellationToken)
     {
         VocabularyFilter filter = CreateFilter(request);
-        IReadOnlyList<int> candidates = await repository.GetCandidateNumbersAsync(
+        IReadOnlyList<int>? fullRandomCandidates = request.Mode == PracticeMode.FullRandom
+            ? await LoadFullRandomCandidatesAsync(filter, cancellationToken)
+            : null;
+        var session = new PracticeSession(
+            request,
             filter,
-            cancellationToken);
-        EnsureCandidatesExist(candidates);
-
-        var session = new PracticeSession(request.Direction, candidates);
+            fullRandomCandidates,
+            randomSource);
         Guid sessionId = Guid.NewGuid();
         cache.Set(sessionId, session, SessionLifetime);
 
-        PracticeQuestionResponse question = await MoveToNextQuestionAsync(
-            session,
-            cancellationToken);
-        return new StartPracticeResponse(sessionId, question);
+        try
+        {
+            PracticeQuestionResponse question = await MoveToNextQuestionAsync(
+                session,
+                cancellationToken);
+            return new StartPracticeResponse(sessionId, question);
+        }
+        catch
+        {
+            cache.Remove(sessionId);
+            throw;
+        }
     }
 
     public Task<PracticeQuestionResponse> GetNextQuestionAsync(
@@ -48,12 +61,16 @@ public sealed class PracticeSessionService(
         bool isCorrect = IsCorrectAnswer(session.Direction, vocabulary, request.Answer);
 
         if (!isCorrect)
-            return new PracticeAnswerResponse(false, null);
+        {
+            session.RegisterWrongAttempt(number);
+            return new PracticeAnswerResponse(false, null, null, null);
+        }
 
-        session.MarkCurrentQuestionAnswered(number);
-        return new PracticeAnswerResponse(
-            true,
-            CreateReveal(session.Direction, vocabulary));
+        return await SettleQuestionAsync(
+            session,
+            vocabulary,
+            currentAnswerIsCorrect: true,
+            cancellationToken);
     }
 
     public async Task<PracticeAnswerResponse> RevealAnswerAsync(
@@ -63,22 +80,44 @@ public sealed class PracticeSessionService(
         PracticeSession session = GetSession(sessionId);
         int number = session.GetCurrentUnansweredNumber();
         VocabularyEntry vocabulary = await GetVocabularyAsync(number, cancellationToken);
-        session.MarkCurrentQuestionAnswered(number);
-        return new PracticeAnswerResponse(
-            false,
-            CreateReveal(session.Direction, vocabulary));
+        return await SettleQuestionAsync(
+            session,
+            vocabulary,
+            currentAnswerIsCorrect: false,
+            cancellationToken);
     }
 
-    public void End(Guid sessionId)
+    public async Task EndAsync(
+        Guid sessionId,
+        CancellationToken cancellationToken)
     {
+        if (!TryGetSession(sessionId, out PracticeSession? session) || session is null)
+            return;
+
+        PracticeSettlement? settlement = session.BeginAbandonmentSettlement();
+        if (settlement is not null)
+            await RecordSettlementAsync(session, settlement, cancellationToken);
         cache.Remove(sessionId);
+    }
+
+    async Task<IReadOnlyList<int>> LoadFullRandomCandidatesAsync(
+        VocabularyFilter filter,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<int> candidates = await vocabularyRepository.GetCandidateNumbersAsync(
+            filter,
+            cancellationToken);
+        EnsureCandidatesExist(candidates.Count);
+        return candidates;
     }
 
     async Task<PracticeQuestionResponse> MoveToNextQuestionAsync(
         PracticeSession session,
         CancellationToken cancellationToken)
     {
-        PracticeQuestionPosition position = session.MoveToNextQuestion();
+        PracticeQuestionPosition position = session.Mode == PracticeMode.FullRandom
+            ? session.BeginNextFullRandomQuestion()
+            : await SelectNextProficiencyQuestionAsync(session, cancellationToken);
         VocabularyEntry vocabulary = await GetVocabularyAsync(
             position.Number,
             cancellationToken);
@@ -89,16 +128,81 @@ public sealed class PracticeSessionService(
         return new PracticeQuestionResponse(
             vocabulary.Number,
             prompt,
+            session.Mode,
             position.Round,
             position.Position,
             position.Total);
+    }
+
+    async Task<PracticeQuestionPosition> SelectNextProficiencyQuestionAsync(
+        PracticeSession session,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<ReviewCandidateProgress> progressRecords =
+            await progressRepository.GetReviewCandidatesAsync(
+                session.Filter,
+                session.Direction,
+                cancellationToken);
+        EnsureCandidatesExist(progressRecords.Count);
+
+        IReadOnlyList<ReviewCandidate> candidates = ReviewCandidateCalculator.Calculate(
+            progressRecords,
+            timeProvider.GetUtcNow());
+        ReviewCandidate selected = ProficiencyQuestionSelector.Select(
+            candidates,
+            randomSource.NextDouble(),
+            randomSource.NextDouble());
+        return session.BeginNextProficiencyQuestion(selected.Number, candidates.Count);
+    }
+
+    async Task<PracticeAnswerResponse> SettleQuestionAsync(
+        PracticeSession session,
+        VocabularyEntry vocabulary,
+        bool currentAnswerIsCorrect,
+        CancellationToken cancellationToken)
+    {
+        PracticeSettlement settlement = session.BeginSettlement(
+            vocabulary.Number,
+            currentAnswerIsCorrect);
+        UserProgressRecord progress = await RecordSettlementAsync(
+            session,
+            settlement,
+            cancellationToken);
+        return new PracticeAnswerResponse(
+            currentAnswerIsCorrect,
+            settlement.Outcome,
+            CreateReveal(session.Direction, vocabulary),
+            CreateProgressResponse(progress));
+    }
+
+    async Task<UserProgressRecord> RecordSettlementAsync(
+        PracticeSession session,
+        PracticeSettlement settlement,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            UserProgressRecord progress = await progressRepository.RecordAnswerAsync(
+                settlement.Number,
+                session.Direction,
+                settlement.Outcome == PracticeOutcome.Correct,
+                timeProvider.GetUtcNow(),
+                cancellationToken);
+            session.CompleteSettlement(settlement.Number);
+            return progress;
+        }
+        catch
+        {
+            session.CancelSettlement(settlement.Number);
+            throw;
+        }
     }
 
     async Task<VocabularyEntry> GetVocabularyAsync(
         int number,
         CancellationToken cancellationToken)
     {
-        VocabularyEntry? vocabulary = await repository.GetByNumberAsync(
+        VocabularyEntry? vocabulary = await vocabularyRepository.GetByNumberAsync(
             number,
             cancellationToken);
         return vocabulary ?? throw new PracticeStateException(
@@ -107,15 +211,22 @@ public sealed class PracticeSessionService(
 
     PracticeSession GetSession(Guid sessionId)
     {
-        if (!cache.TryGetValue(sessionId, out PracticeSession? session) || session is null)
+        if (!TryGetSession(sessionId, out PracticeSession? session) || session is null)
             throw new PracticeSessionNotFoundException();
         return session;
+    }
+
+    bool TryGetSession(Guid sessionId, out PracticeSession? session)
+    {
+        return cache.TryGetValue(sessionId, out session) && session is not null;
     }
 
     static VocabularyFilter CreateFilter(StartPracticeRequest request)
     {
         if (request.MinNumber > request.MaxNumber)
             throw new PracticeValidationException("起始番号不能大於結束番号。");
+        if (!Enum.IsDefined(request.Mode))
+            throw new PracticeValidationException("練習模式無效。");
         if (!Enum.IsDefined(request.Direction))
             throw new PracticeValidationException("翻譯方向無效。");
 
@@ -125,9 +236,9 @@ public sealed class PracticeSessionService(
         return new VocabularyFilter(request.MinNumber, request.MaxNumber, type);
     }
 
-    static void EnsureCandidatesExist(IReadOnlyCollection<int> candidates)
+    static void EnsureCandidatesExist(int candidateCount)
     {
-        if (candidates.Count == 0)
+        if (candidateCount == 0)
             throw new PracticeValidationException("指定範圍與類型內沒有單字。");
     }
 
@@ -151,6 +262,16 @@ public sealed class PracticeSessionService(
             GetExpectedAnswer(direction, vocabulary),
             translation,
             RemoveParentheses(vocabulary.Example));
+    }
+
+    static UserProgressResponse CreateProgressResponse(UserProgressRecord progress)
+    {
+        return new UserProgressResponse(
+            progress.Proficiency,
+            progress.LastAnswer,
+            progress.NextReview,
+            progress.TotalCorrect,
+            progress.TotalWrong);
     }
 
     static string GetExpectedAnswer(
