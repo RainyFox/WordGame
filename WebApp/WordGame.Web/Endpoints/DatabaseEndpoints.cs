@@ -30,6 +30,14 @@ public static class DatabaseEndpoints
         catch (Exception exception)
         {
             logger.LogError(exception, "WordGame database health check failed.");
+            if (SqliteDatabaseErrors.IsBusyOrLocked(exception))
+            {
+                return Results.Json(
+                    new ApiErrorResponse(
+                        "WordGame.db 正在被其他程式使用。請關閉 Unity 或 SQLite Browser 後再試。"),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
             return Results.Json(
                 new ApiErrorResponse("無法以唯讀模式連接 WordGame.db。"),
                 statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -44,8 +52,16 @@ public static class DatabaseEndpoints
         {
             return Results.Ok(await repository.GetSummaryAsync(cancellationToken));
         }
-        catch
+        catch (Exception exception)
         {
+            if (SqliteDatabaseErrors.IsBusyOrLocked(exception))
+            {
+                return Results.Json(
+                    new ApiErrorResponse(
+                        "WordGame.db 正在被其他程式使用。請關閉 Unity 或 SQLite Browser 後再試。"),
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
             return Results.Json(
                 new ApiErrorResponse("無法讀取單字摘要。"),
                 statusCode: StatusCodes.Status503ServiceUnavailable);

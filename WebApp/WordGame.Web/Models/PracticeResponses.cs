@@ -12,6 +12,7 @@ public sealed record StartPracticeResponse(
 public sealed record PracticeQuestionResponse(
     int Number,
     string Prompt,
+    IReadOnlyList<string> Choices,
     PracticeMode Mode,
     int Round,
     int Position,

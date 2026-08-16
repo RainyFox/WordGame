@@ -35,6 +35,7 @@ public sealed class SqlitePracticeVocabularyRepository(
         FROM Vocabulary
         WHERE 番号 = $number
         """;
+    const int RequiredDistractorCount = 3;
 
     public async Task<PracticeOptionsResponse> GetOptionsAsync(
         CancellationToken cancellationToken)
@@ -82,6 +83,41 @@ public sealed class SqlitePracticeVocabularyRepository(
             : null;
     }
 
+    public async Task<IReadOnlyList<string>> GetDistractorAnswersAsync(
+        VocabularyEntry question,
+        PracticeDirection direction,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteConnection connection =
+            await connectionFactory.OpenAsync(cancellationToken);
+        string correctAnswer = GetAnswer(direction, question);
+        string? preferredType = string.IsNullOrWhiteSpace(question.Type)
+            ? null
+            : question.Type.Trim();
+        IReadOnlyList<string> preferred = await ReadDistractorAnswersAsync(
+            connection,
+            question.Number,
+            correctAnswer,
+            direction,
+            preferredType,
+            cancellationToken);
+
+        if (preferred.Count >= RequiredDistractorCount || preferredType is null)
+            return preferred;
+
+        IReadOnlyList<string> fallback = await ReadDistractorAnswersAsync(
+            connection,
+            question.Number,
+            correctAnswer,
+            direction,
+            type: null,
+            cancellationToken);
+        return preferred
+            .Concat(fallback)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
     static async Task<(int MinNumber, int MaxNumber)> ReadNumberRangeAsync(
         SqliteConnection connection,
         CancellationToken cancellationToken)
@@ -119,6 +155,53 @@ public sealed class SqlitePracticeVocabularyRepository(
         while (await reader.ReadAsync(cancellationToken))
             numbers.Add(reader.GetInt32(0));
         return numbers;
+    }
+
+    static async Task<IReadOnlyList<string>> ReadDistractorAnswersAsync(
+        SqliteConnection connection,
+        int questionNumber,
+        string correctAnswer,
+        PracticeDirection direction,
+        string? type,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = CreateDistractorAnswersSql(direction);
+        command.Parameters.AddWithValue("$number", questionNumber);
+        command.Parameters.AddWithValue("$correctAnswer", correctAnswer);
+        command.Parameters.AddWithValue("$type", (object?)type ?? DBNull.Value);
+
+        await using SqliteDataReader reader =
+            await command.ExecuteReaderAsync(cancellationToken);
+        var answers = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+            answers.Add(reader.GetString(0));
+        return answers;
+    }
+
+    static string CreateDistractorAnswersSql(PracticeDirection direction)
+    {
+        string answerColumn = direction == PracticeDirection.JpToCn
+            ? "かな"
+            : "単語";
+        return $"""
+            SELECT DISTINCT COALESCE({answerColumn}, '') AS Answer
+            FROM Vocabulary
+            WHERE 番号 <> $number
+              AND COALESCE({answerColumn}, '') <> $correctAnswer
+              AND TRIM(COALESCE({answerColumn}, '')) <> ''
+              AND ($type IS NULL OR TRIM(COALESCE(タイプ, '')) = $type)
+            ORDER BY Answer
+            """;
+    }
+
+    static string GetAnswer(
+        PracticeDirection direction,
+        VocabularyEntry question)
+    {
+        return direction == PracticeDirection.JpToCn
+            ? question.Kana
+            : question.Word;
     }
 
     static VocabularyEntry ReadVocabulary(SqliteDataReader reader)

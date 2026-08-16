@@ -14,4 +14,9 @@ public interface IPracticeVocabularyRepository
     Task<VocabularyEntry?> GetByNumberAsync(
         int number,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<string>> GetDistractorAnswersAsync(
+        VocabularyEntry question,
+        PracticeDirection direction,
+        CancellationToken cancellationToken);
 }

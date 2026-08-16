@@ -26,11 +26,11 @@
   <main class="app-shell">
     <section id="setupView" class="setup-layout">
       <div class="intro-panel">
-        <p class="eyebrow">PHASE 4 · SCHEDULED REVIEW</p>
+        <p class="eyebrow">PHASE 5 · DAILY PRACTICE</p>
         <h1>選好練習方式，<br>讓每次作答留下進度。</h1>
         <p class="intro-copy">
           完全隨機模式會維持輪內不重複；熟練度複習則優先安排新題與到期題。
-          每題只結算一次，並分別保存兩個出題方向的熟練度。
+          可隨時展開同類型四選一，並分別保存兩個出題方向的熟練度。
         </p>
 
         <dl class="database-summary">
@@ -160,6 +160,26 @@
           </div>
         </form>
 
+        <div class="multiple-choice-toolbar">
+          <button
+            id="toggleChoicesButton"
+            class="choice-toggle-button"
+            type="button"
+            aria-controls="multipleChoicePanel"
+            aria-expanded="false">
+            顯示四選一（C）
+          </button>
+        </div>
+
+        <section
+          id="multipleChoicePanel"
+          class="multiple-choice-panel"
+          aria-label="四選一答案"
+          hidden>
+          <p>選擇答案，也可以按數字鍵 1–4</p>
+          <div id="multipleChoiceGrid" class="multiple-choice-grid"></div>
+        </section>
+
         <p id="answerFeedback" class="answer-feedback" aria-live="polite"></p>
 
         <section id="revealPanel" class="reveal-panel" hidden>
@@ -189,7 +209,9 @@
         </div>
       </article>
 
-      <p class="keyboard-hint">Enter：確認答案／前往下一題</p>
+      <p class="keyboard-hint">
+        Enter：確認／下一題 · C：顯示選項 · 1–4：選擇 · Esc：隱藏
+      </p>
     </section>
   </main>
 

@@ -121,6 +121,10 @@ public static class PracticeEndpoints
     {
         return exception switch
         {
+            _ when SqliteDatabaseErrors.IsBusyOrLocked(exception) => Results.Json(
+                new ApiErrorResponse(
+                    "WordGame.db 正在被其他程式使用。請關閉 Unity 或 SQLite Browser 後再試。"),
+                statusCode: StatusCodes.Status503ServiceUnavailable),
             PracticeValidationException => Results.BadRequest(
                 new ApiErrorResponse(exception.Message)),
             PracticeSessionNotFoundException => Results.NotFound(

@@ -25,6 +25,21 @@ internal sealed class TemporaryWordGameDatabase : IDisposable
         return SHA256.HashData(File.ReadAllBytes(DatabasePath));
     }
 
+    public IDisposable HoldExclusiveLock()
+    {
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = DatabasePath,
+            Pooling = false
+        };
+        var connection = new SqliteConnection(connectionString.ToString());
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "BEGIN EXCLUSIVE";
+        command.ExecuteNonQuery();
+        return connection;
+    }
+
     public StoredProgressRow? ReadProgress(
         int number,
         PracticeDirection direction)

@@ -36,6 +36,7 @@ public sealed class SqliteReadOnlyWordGameConnectionFactory(
         {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadOnly,
+            DefaultTimeout = 1,
             Pooling = false
         };
         return new SqliteConnection(connectionString.ToString());

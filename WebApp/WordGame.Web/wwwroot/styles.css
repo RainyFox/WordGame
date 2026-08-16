@@ -479,6 +479,102 @@ select:focus {
   font-size: 1.08rem;
 }
 
+.multiple-choice-toolbar {
+  display: flex;
+  max-width: 620px;
+  margin: 12px auto 0;
+  justify-content: flex-end;
+}
+
+.choice-toggle-button {
+  padding: 7px 2px;
+  border: 0;
+  color: #596960;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.choice-toggle-button:hover:not(:disabled) {
+  color: #1d2924;
+}
+
+.multiple-choice-panel {
+  max-width: 620px;
+  margin: 16px auto 0;
+  padding: 16px;
+  border: 1px solid rgba(38, 58, 48, 0.1);
+  border-radius: 18px;
+  background: rgba(237, 241, 235, 0.88);
+}
+
+.multiple-choice-panel > p {
+  margin: 0 0 10px;
+  color: #718078;
+  font-size: 0.75rem;
+}
+
+.multiple-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.answer-choice {
+  display: grid;
+  min-height: 58px;
+  padding: 11px 13px;
+  border: 1px solid #ced8d0;
+  border-radius: 13px;
+  grid-template-columns: 25px 1fr;
+  gap: 9px;
+  align-items: center;
+  color: #24362d;
+  background: #fbfcfa;
+  text-align: left;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+.answer-choice:hover:not(:disabled),
+.answer-choice:focus-visible {
+  border-color: #789481;
+  background: #f2f7f2;
+  transform: translateY(-1px);
+}
+
+.answer-choice:focus-visible {
+  outline: 3px solid rgba(70, 112, 84, 0.22);
+  outline-offset: 2px;
+}
+
+.answer-choice:disabled {
+  cursor: default;
+}
+
+.answer-choice--rejected {
+  border-color: #e2b6b0;
+  color: #9b4941;
+  background: #f9eae7;
+  text-decoration: line-through;
+}
+
+.answer-choice__number {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  place-items: center;
+  color: #63736a;
+  background: #e8eee8;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.answer-choice__text {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
 .answer-feedback {
   min-height: 24px;
   margin: 14px auto 0;
@@ -658,6 +754,14 @@ select:focus {
 
   .answer-row .primary-button {
     width: 100%;
+  }
+
+  .multiple-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .answer-choice {
+    min-height: 54px;
   }
 }
 

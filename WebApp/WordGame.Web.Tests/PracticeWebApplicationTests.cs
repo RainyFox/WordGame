@@ -111,6 +111,9 @@ public sealed class PracticeWebApplicationTests
             "整う");
 
         Assert.Equal("整理", session.Question.Prompt);
+        Assert.Equal(4, session.Question.Choices.Count);
+        Assert.Equal(4, session.Question.Choices.Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains("整う", session.Question.Choices);
         Assert.True(correct.IsCorrect);
         Assert.Equal(PracticeOutcome.Correct, correct.RecordedOutcome);
         Assert.NotNull(correct.Progress);
@@ -196,6 +199,31 @@ public sealed class PracticeWebApplicationTests
         Assert.Equal(HttpStatusCode.BadRequest, emptyType.StatusCode);
     }
 
+    [Fact]
+    public async Task ConcurrentCorrectSubmissions_RecordProgressOnlyOnce()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+        StartPracticeResponse session = await StartSessionAsync(client, 2, 2);
+
+        Task<HttpResponseMessage> firstSubmission = PostAnswerAsync(
+            client,
+            session.SessionId,
+            "しゅうとく");
+        Task<HttpResponseMessage> secondSubmission = PostAnswerAsync(
+            client,
+            session.SessionId,
+            "しゅうとく");
+        HttpResponseMessage[] responses = await Task.WhenAll(
+            firstSubmission,
+            secondSubmission);
+
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
+        Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalCorrect);
+    }
+
     static WebApplicationFactory<Program> CreateFactory(
         TemporaryWordGameDatabase database,
         SequenceRandomSource? randomSource = null)
@@ -253,6 +281,17 @@ public sealed class PracticeWebApplicationTests
         return (await response.Content.ReadFromJsonAsync<PracticeAnswerResponse>(
             JsonOptions,
             CancellationToken.None))!;
+    }
+
+    static Task<HttpResponseMessage> PostAnswerAsync(
+        HttpClient client,
+        Guid sessionId,
+        string answer)
+    {
+        return client.PostAsJsonAsync(
+            $"/api/practice/sessions/{sessionId}/answer",
+            new { answer },
+            CancellationToken.None);
     }
 
     static async Task<PracticeAnswerResponse> RevealAsync(

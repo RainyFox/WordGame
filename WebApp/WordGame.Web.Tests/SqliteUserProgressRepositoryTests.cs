@@ -49,6 +49,55 @@ public sealed class SqliteUserProgressRepositoryTests
     }
 
     [Fact]
+    public async Task RecordAnswerAsync_CorrectAnswerStopsAtMaximumProficiency()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        SqliteUserProgressRepository repository = CreateRepository(database.DatabasePath);
+
+        await repository.RecordAnswerAsync(
+            1,
+            PracticeDirection.JpToCn,
+            true,
+            AnsweredAt,
+            CancellationToken.None);
+        await repository.RecordAnswerAsync(
+            1,
+            PracticeDirection.JpToCn,
+            true,
+            AnsweredAt,
+            CancellationToken.None);
+        UserProgressRecord result = await repository.RecordAnswerAsync(
+            1,
+            PracticeDirection.JpToCn,
+            true,
+            AnsweredAt,
+            CancellationToken.None);
+
+        Assert.Equal(5, result.Proficiency);
+        Assert.Equal(7, result.TotalCorrect);
+        Assert.Equal(AnsweredAt.AddDays(32), result.NextReview);
+    }
+
+    [Fact]
+    public async Task RecordAnswerAsync_WrongAnswerReducesPositiveProficiency()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        SqliteUserProgressRepository repository = CreateRepository(database.DatabasePath);
+
+        UserProgressRecord result = await repository.RecordAnswerAsync(
+            1,
+            PracticeDirection.JpToCn,
+            false,
+            AnsweredAt,
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Proficiency);
+        Assert.Equal(4, result.TotalCorrect);
+        Assert.Equal(2, result.TotalWrong);
+        Assert.Equal(AnsweredAt.AddDays(1), result.NextReview);
+    }
+
+    [Fact]
     public async Task RecordAnswerAsync_KeepsDirectionsIndependent()
     {
         using var database = new TemporaryWordGameDatabase();

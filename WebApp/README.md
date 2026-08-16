@@ -20,7 +20,7 @@ It is kept outside `Assets` so Unity does not import or compile the web project.
 
 ## Current status
 
-Phase 4 provides an ASP.NET Core practice application that:
+Phase 5 provides an ASP.NET Core practice application that:
 
 - binds to `http://127.0.0.1:5276`;
 - resolves the project-root `WordGame.db`;
@@ -32,9 +32,15 @@ Phase 4 provides an ASP.NET Core practice application that:
 - selects proficiency-review questions with the same new/due ratio, overdue
   weight, and closest-review fallback as the Unity application;
 - supports retrying a wrong answer or revealing an unknown answer;
+- provides four shuffled choices with same-type distractors and a cross-type
+  fallback only when a type has fewer than three distinct distractors;
+- supports showing or hiding choices, number keys, arrow-key navigation,
+  automatic focus, and IME-safe Enter handling;
 - records `UserProgress` once per completed question;
 - treats a correct answer after any wrong attempt as one wrong result;
 - updates proficiency, answer totals, `LastAnswer`, and `NextReview`;
+- prevents duplicate browser and server-side settlement requests;
+- explains when another application has locked the SQLite database;
 - serves the complete browser practice flow from `WordGame.Web/wwwroot`.
 
 Practice sessions are kept in server memory and expire after eight hours of
@@ -59,7 +65,12 @@ read-only.
 
 Requirements: .NET 10 SDK.
 
-Run the application:
+For normal daily use, double-click `../StartWordGameWeb.cmd`. It waits for the
+application to become ready and then opens `http://127.0.0.1:5276/` in the
+default browser. Keep the command window open while practicing and press
+`Ctrl+C` to stop the server.
+
+Run the application manually:
 
 ```powershell
 dotnet run --project WebApp/WordGame.Web/WordGame.Web.csproj
@@ -70,3 +81,7 @@ Run all tests:
 ```powershell
 dotnet test WebApp/WordGame.Web.sln
 ```
+
+The integration suite creates disposable SQLite databases and also copies the
+project-root `WordGame.db` into a temporary directory for a complete practice
+flow. Tests never write to the source database.

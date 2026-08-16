@@ -46,7 +46,7 @@ public sealed class WordGameWebApplicationTests
             CancellationToken.None);
 
         Assert.Contains("WordGame Web", html, StringComparison.Ordinal);
-        Assert.Contains("PHASE 4 · SCHEDULED REVIEW", html, StringComparison.Ordinal);
+        Assert.Contains("PHASE 5 · DAILY PRACTICE", html, StringComparison.Ordinal);
         Assert.Contains("PROGRESS ON", html, StringComparison.Ordinal);
     }
 
@@ -63,5 +63,25 @@ public sealed class WordGameWebApplicationTests
             CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task HealthEndpoint_ExplainsWhenDatabaseIsLocked()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory =
+            WordGameWebApplicationFactory.Create(database.DatabasePath);
+        using HttpClient client = factory.CreateClient();
+        using IDisposable databaseLock = database.HoldExclusiveLock();
+
+        HttpResponseMessage response = await client.GetAsync(
+            "/api/health",
+            CancellationToken.None);
+        ApiErrorResponse? error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(
+            cancellationToken: CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.NotNull(error);
+        Assert.Contains("正在被其他程式使用", error.Message, StringComparison.Ordinal);
     }
 }

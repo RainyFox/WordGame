@@ -25,6 +25,9 @@ const elements = {
   answerForm: document.querySelector("#answerForm"),
   answerInput: document.querySelector("#answerInput"),
   submitAnswerButton: document.querySelector("#submitAnswerButton"),
+  toggleChoicesButton: document.querySelector("#toggleChoicesButton"),
+  multipleChoicePanel: document.querySelector("#multipleChoicePanel"),
+  multipleChoiceGrid: document.querySelector("#multipleChoiceGrid"),
   answerFeedback: document.querySelector("#answerFeedback"),
   revealPanel: document.querySelector("#revealPanel"),
   revealedAnswer: document.querySelector("#revealedAnswer"),
@@ -43,7 +46,9 @@ const state = {
   mode: "FullRandom",
   direction: "JpToCn",
   readyForNext: false,
-  composingAnswer: false
+  composingAnswer: false,
+  requestInFlight: false,
+  selectedChoiceButton: null
 };
 
 const numberFormatter = new Intl.NumberFormat("zh-TW");
@@ -190,23 +195,95 @@ function renderQuestion(question) {
   elements.revealPanel.hidden = true;
   elements.revealButton.hidden = false;
   elements.revealButton.disabled = false;
+  elements.toggleChoicesButton.hidden = false;
   elements.nextButton.hidden = true;
   elements.nextButton.disabled = false;
+  renderMultipleChoices(question.choices);
+  setMultipleChoiceVisibility(false, false);
   elements.answerInput.focus();
+}
+
+function renderMultipleChoices(choices) {
+  const choiceButtons = choices.map(createMultipleChoiceButton);
+  elements.multipleChoiceGrid.replaceChildren(...choiceButtons);
+  elements.toggleChoicesButton.disabled = choiceButtons.length === 0;
+}
+
+function createMultipleChoiceButton(answer, index) {
+  const button = document.createElement("button");
+  const number = document.createElement("span");
+  const text = document.createElement("span");
+
+  button.type = "button";
+  button.className = "answer-choice";
+  button.dataset.answer = answer;
+  button.dataset.rejected = "false";
+  button.setAttribute("aria-label", `${index + 1}：${answer}`);
+  number.className = "answer-choice__number";
+  number.setAttribute("aria-hidden", "true");
+  number.textContent = index + 1;
+  text.className = "answer-choice__text";
+  text.textContent = answer;
+  button.append(number, text);
+  button.addEventListener("click", () => submitMultipleChoice(button));
+  return button;
+}
+
+function submitMultipleChoice(button) {
+  if (button.disabled || state.readyForNext || state.requestInFlight)
+    return;
+
+  state.selectedChoiceButton = button;
+  elements.answerInput.value = button.dataset.answer;
+  elements.answerForm.requestSubmit();
+}
+
+function toggleMultipleChoices() {
+  if (state.readyForNext || state.requestInFlight)
+    return;
+
+  setMultipleChoiceVisibility(elements.multipleChoicePanel.hidden, true);
+}
+
+function setMultipleChoiceVisibility(visible, shouldFocus = true) {
+  const canShow = visible && elements.multipleChoiceGrid.children.length > 0;
+  elements.multipleChoicePanel.hidden = !canShow;
+  elements.toggleChoicesButton.setAttribute("aria-expanded", String(canShow));
+  elements.toggleChoicesButton.textContent = canShow
+    ? "隱藏四選一（C）"
+    : "顯示四選一（C）";
+
+  if (!shouldFocus)
+    return;
+  if (canShow)
+    focusFirstAvailableChoice();
+  else
+    elements.answerInput.focus();
+}
+
+function focusFirstAvailableChoice() {
+  getAvailableChoiceButtons()[0]?.focus();
+}
+
+function getChoiceButtons() {
+  return [...elements.multipleChoiceGrid.querySelectorAll(".answer-choice")];
+}
+
+function getAvailableChoiceButtons() {
+  return getChoiceButtons().filter(button => !button.disabled);
 }
 
 async function submitAnswer(event) {
   event.preventDefault();
-  if (state.composingAnswer || state.readyForNext)
+  if (state.composingAnswer || state.readyForNext || state.requestInFlight)
     return;
 
-  const answer = elements.answerInput.value.trim();
-  if (!answer) {
-    showAnswerFeedback("請先輸入答案，或選擇「不知道」。", "wrong");
-    elements.answerInput.focus();
+  const answer = readSubmittedAnswer();
+  if (!answer || !beginRequest())
     return;
-  }
 
+  const selectedChoiceButton = state.selectedChoiceButton;
+  state.selectedChoiceButton = null;
   setAnswerControlsDisabled(true);
   try {
     const result = await fetchJson(sessionUrl("answer"), {
@@ -218,27 +295,57 @@ async function submitAnswer(event) {
       return;
     }
 
-    showAnswerFeedback("不對，再想一下。", "wrong");
-    elements.answerInput.select();
+    showIncorrectAnswer(selectedChoiceButton);
   } catch (error) {
     showAnswerFeedback(error.message, "wrong");
   } finally {
+    finishRequest();
     if (!state.readyForNext)
       setAnswerControlsDisabled(false);
+    if (selectedChoiceButton && !state.readyForNext)
+      focusFirstAvailableChoice();
   }
 }
 
+function readSubmittedAnswer() {
+  const answer = elements.answerInput.value.trim();
+  if (answer)
+    return answer;
+
+  showAnswerFeedback("請先輸入答案，或選擇「不知道」。", "wrong");
+  elements.answerInput.focus();
+  return null;
+}
+
+function showIncorrectAnswer(selectedChoiceButton) {
+  showAnswerFeedback("不對，再想一下。", "wrong");
+  if (selectedChoiceButton)
+    rejectChoice(selectedChoiceButton);
+  else
+    elements.answerInput.select();
+}
+
 async function revealAnswer() {
+  if (!beginRequest())
+    return;
+
   setAnswerControlsDisabled(true);
-  elements.revealButton.disabled = true;
   try {
     const result = await fetchJson(sessionUrl("reveal"), { method: "POST" });
     showReveal(result);
   } catch (error) {
     showAnswerFeedback(error.message, "wrong");
     setAnswerControlsDisabled(false);
-    elements.revealButton.disabled = false;
+  } finally {
+    finishRequest();
   }
+}
+
+function rejectChoice(button) {
+  button.dataset.rejected = "true";
+  button.classList.add("answer-choice--rejected");
+  button.disabled = true;
+  button.setAttribute("aria-label", `${button.getAttribute("aria-label")}，已排除`);
 }
 
 function showReveal(result) {
@@ -255,6 +362,8 @@ function showReveal(result) {
   elements.answerInput.disabled = true;
   elements.submitAnswerButton.disabled = true;
   elements.revealButton.hidden = true;
+  elements.toggleChoicesButton.hidden = true;
+  setMultipleChoiceVisibility(false, false);
   elements.nextButton.hidden = false;
   elements.nextButton.focus();
 }
@@ -303,6 +412,9 @@ function showAnswerFeedback(message, tone) {
 }
 
 async function loadNextQuestion() {
+  if (!beginRequest())
+    return;
+
   elements.nextButton.disabled = true;
   try {
     const question = await fetchJson(sessionUrl("next"), { method: "POST" });
@@ -310,10 +422,15 @@ async function loadNextQuestion() {
   } catch (error) {
     showAnswerFeedback(error.message, "wrong");
     elements.nextButton.disabled = false;
+  } finally {
+    finishRequest();
   }
 }
 
 async function endPractice() {
+  if (!beginRequest())
+    return;
+
   const sessionId = state.sessionId;
   elements.endSessionButton.disabled = true;
   try {
@@ -326,9 +443,11 @@ async function endPractice() {
     state.readyForNext = false;
     elements.practiceView.hidden = true;
     elements.setupView.hidden = false;
+    elements.startButton.focus();
   } catch (error) {
     showAnswerFeedback(error.message, "wrong");
   } finally {
+    finishRequest();
     elements.endSessionButton.disabled = false;
   }
 }
@@ -340,6 +459,22 @@ function sessionUrl(action) {
 function setAnswerControlsDisabled(disabled) {
   elements.answerInput.disabled = disabled;
   elements.submitAnswerButton.disabled = disabled;
+  elements.revealButton.disabled = disabled;
+  elements.toggleChoicesButton.disabled = disabled;
+  getChoiceButtons().forEach(button => {
+    button.disabled = disabled || button.dataset.rejected === "true";
+  });
+}
+
+function beginRequest() {
+  if (state.requestInFlight)
+    return false;
+  state.requestInFlight = true;
+  return true;
+}
+
+function finishRequest() {
+  state.requestInFlight = false;
 }
 
 function setButtonBusy(button, busy, busyText = "處理中……") {
@@ -392,16 +527,84 @@ elements.answerInput.addEventListener("compositionend", () => {
   state.composingAnswer = false;
 });
 elements.revealButton.addEventListener("click", revealAnswer);
+elements.toggleChoicesButton.addEventListener("click", toggleMultipleChoices);
 elements.nextButton.addEventListener("click", loadNextQuestion);
 elements.endSessionButton.addEventListener("click", endPractice);
 document.querySelectorAll('input[name="mode"]').forEach(input => {
   input.addEventListener("change", updateStartButtonLabel);
 });
-document.addEventListener("keydown", handleEnterShortcut);
+document.addEventListener("keydown", handleKeyboardShortcut);
 window.addEventListener("pagehide", abandonSessionOnPageHide);
 
+function handleKeyboardShortcut(event) {
+  if (event.repeat || state.composingAnswer)
+    return;
+
+  if (event.key === "Enter") {
+    handleEnterShortcut(event);
+    return;
+  }
+
+  if (elements.practiceView.hidden || state.readyForNext || state.requestInFlight)
+    return;
+
+  if (tryHideMultipleChoices(event))
+    return;
+
+  if (isEditableElement(event.target))
+    return;
+
+  if (tryToggleMultipleChoices(event))
+    return;
+
+  if (elements.multipleChoicePanel.hidden)
+    return;
+
+  if (trySelectMultipleChoice(event))
+    return;
+
+  tryMoveChoiceFocus(event);
+}
+
+function tryHideMultipleChoices(event) {
+  if (event.key !== "Escape" || elements.multipleChoicePanel.hidden)
+    return false;
+
+  event.preventDefault();
+  setMultipleChoiceVisibility(false, true);
+  return true;
+}
+
+function tryToggleMultipleChoices(event) {
+  if (event.key.toLowerCase() !== "c")
+    return false;
+
+  event.preventDefault();
+  toggleMultipleChoices();
+  return true;
+}
+
+function trySelectMultipleChoice(event) {
+  if (!/^[1-4]$/.test(event.key))
+    return false;
+
+  event.preventDefault();
+  getChoiceButtons()[Number(event.key) - 1]?.click();
+  return true;
+}
+
+function tryMoveChoiceFocus(event) {
+  const arrowKeys = ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"];
+  if (!arrowKeys.includes(event.key))
+    return false;
+
+  event.preventDefault();
+  moveChoiceFocus(event.key);
+  return true;
+}
+
 function handleEnterShortcut(event) {
-  if (event.key !== "Enter" || event.repeat || state.composingAnswer)
+  if (state.requestInFlight)
     return;
 
   if (state.readyForNext) {
@@ -415,6 +618,25 @@ function handleEnterShortcut(event) {
     event.preventDefault();
     elements.answerForm.requestSubmit();
   }
+}
+
+function isEditableElement(target) {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement;
+}
+
+function moveChoiceFocus(key) {
+  const buttons = getAvailableChoiceButtons();
+  if (buttons.length === 0)
+    return;
+
+  const currentIndex = buttons.indexOf(document.activeElement);
+  const direction = key === "ArrowLeft" || key === "ArrowUp" ? -1 : 1;
+  const nextIndex = currentIndex < 0
+    ? 0
+    : (currentIndex + direction + buttons.length) % buttons.length;
+  buttons[nextIndex].focus();
 }
 
 initialize();

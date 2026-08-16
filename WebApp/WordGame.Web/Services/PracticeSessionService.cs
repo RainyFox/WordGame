@@ -6,6 +6,7 @@ namespace WordGame.Web.Services;
 
 public sealed class PracticeSessionService(
     IPracticeVocabularyRepository vocabularyRepository,
+    IMultipleChoiceService multipleChoiceService,
     IUserProgressRepository progressRepository,
     IRandomSource randomSource,
     TimeProvider timeProvider,
@@ -124,10 +125,15 @@ public sealed class PracticeSessionService(
         string prompt = session.Direction == PracticeDirection.JpToCn
             ? vocabulary.Word
             : vocabulary.Chinese;
+        IReadOnlyList<string> choices = await multipleChoiceService.CreateChoicesAsync(
+            vocabulary,
+            session.Direction,
+            cancellationToken);
 
         return new PracticeQuestionResponse(
             vocabulary.Number,
             prompt,
+            choices,
             session.Mode,
             position.Round,
             position.Position,

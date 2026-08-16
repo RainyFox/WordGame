@@ -4,6 +4,8 @@ using WordGame.Web.Endpoints;
 using WordGame.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddSimpleConsole(options => options.SingleLine = true);
 builder.WebHost.UseUrls("http://127.0.0.1:5276");
 builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -19,6 +21,7 @@ builder.Services.AddSingleton<IPracticeVocabularyRepository,
     SqlitePracticeVocabularyRepository>();
 builder.Services.AddSingleton<IUserProgressRepository, SqliteUserProgressRepository>();
 builder.Services.AddSingleton<IRandomSource, SystemRandomSource>();
+builder.Services.AddSingleton<IMultipleChoiceService, MultipleChoiceService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IPracticeSessionService, PracticeSessionService>();
