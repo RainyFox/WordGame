@@ -12,7 +12,7 @@ public sealed class SqliteVocabularyReadRepositoryTests
         using var database = new TemporaryWordGameDatabase();
         byte[] hashBeforeRead = database.ComputeHash();
         var repository = new SqliteVocabularyReadRepository(
-            new FixedDatabasePathResolver(database.DatabasePath));
+            CreateConnectionFactory(database.DatabasePath));
 
         VocabularySummary summary = await repository.GetSummaryAsync(
             CancellationToken.None);
@@ -27,9 +27,16 @@ public sealed class SqliteVocabularyReadRepositoryTests
     {
         string missingPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.db");
         var repository = new SqliteVocabularyReadRepository(
-            new FixedDatabasePathResolver(missingPath));
+            CreateConnectionFactory(missingPath));
 
         await Assert.ThrowsAsync<FileNotFoundException>(() =>
             repository.GetSummaryAsync(CancellationToken.None));
+    }
+
+    static SqliteReadOnlyWordGameConnectionFactory CreateConnectionFactory(
+        string databasePath)
+    {
+        return new SqliteReadOnlyWordGameConnectionFactory(
+            new FixedDatabasePathResolver(databasePath));
     }
 }

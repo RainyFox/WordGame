@@ -20,13 +20,20 @@ It is kept outside `Assets` so Unity does not import or compile the web project.
 
 ## Current status
 
-Phase 1 provides a read-only ASP.NET Core application that:
+Phase 2 provides a read-only ASP.NET Core practice application that:
 
 - binds to `http://127.0.0.1:5276`;
 - resolves the project-root `WordGame.db`;
 - reports database health through `/api/health`;
 - reports vocabulary count and types through `/api/vocabulary/summary`;
-- serves a browser status page from `WordGame.Web/wwwroot`.
+- filters practice words by actual `番号` range and `タイプ`;
+- supports Japanese-to-kana and Chinese-to-Japanese questions;
+- shuffles every matching word without repeats inside a round;
+- supports retrying a wrong answer or revealing an unknown answer;
+- serves the complete browser practice flow from `WordGame.Web/wwwroot`.
+
+Practice sessions are kept in server memory and expire after eight hours of
+inactivity. Phase 2 does not update `UserProgress`.
 
 ## Development
 

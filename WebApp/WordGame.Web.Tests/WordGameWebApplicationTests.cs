@@ -1,9 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
 using WordGame.Web.Models;
 using WordGame.Web.Tests.Support;
 
@@ -16,7 +13,8 @@ public sealed class WordGameWebApplicationTests
     {
         using var database = new TemporaryWordGameDatabase();
         byte[] hashBeforeRequests = database.ComputeHash();
-        await using WebApplicationFactory<Program> factory = CreateFactory(database.DatabasePath);
+        await using WebApplicationFactory<Program> factory =
+            WordGameWebApplicationFactory.Create(database.DatabasePath);
         using HttpClient client = factory.CreateClient();
 
         HealthResponse? health = await client.GetFromJsonAsync<HealthResponse>(
@@ -39,7 +37,8 @@ public sealed class WordGameWebApplicationTests
     public async Task IndexPage_IsServedByApplication()
     {
         using var database = new TemporaryWordGameDatabase();
-        await using WebApplicationFactory<Program> factory = CreateFactory(database.DatabasePath);
+        await using WebApplicationFactory<Program> factory =
+            WordGameWebApplicationFactory.Create(database.DatabasePath);
         using HttpClient client = factory.CreateClient();
 
         string html = await client.GetStringAsync(
@@ -54,7 +53,8 @@ public sealed class WordGameWebApplicationTests
     public async Task HealthEndpoint_ReturnsServiceUnavailableForMissingDatabase()
     {
         string missingPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.db");
-        await using WebApplicationFactory<Program> factory = CreateFactory(missingPath);
+        await using WebApplicationFactory<Program> factory =
+            WordGameWebApplicationFactory.Create(missingPath);
         using HttpClient client = factory.CreateClient();
 
         HttpResponseMessage response = await client.GetAsync(
@@ -62,20 +62,5 @@ public sealed class WordGameWebApplicationTests
             CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-    }
-
-    static WebApplicationFactory<Program> CreateFactory(string databasePath)
-    {
-        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-        {
-            builder.ConfigureLogging(logging => logging.ClearProviders());
-            builder.ConfigureAppConfiguration((_, configuration) =>
-            {
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Database:Path"] = databasePath
-                });
-            });
-        });
     }
 }

@@ -3,60 +3,168 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="WordGame 瀏覽器練習工具">
+  <meta name="description" content="WordGame 瀏覽器單字練習工具">
   <title>WordGame Web</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main class="page-shell">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">WORDGAME WEB · PHASE 1</p>
-        <h1>讓單字練習離開 Unity，<br>從可靠的資料連線開始。</h1>
-        <p class="hero-copy">
-          目前頁面只以唯讀模式檢查專案根目錄的 WordGame.db，
-          不會修改 Vocabulary 或 UserProgress。
+  <header class="app-header">
+    <a class="brand" href="/" aria-label="WordGame 首頁">
+      <span class="brand-mark">W</span>
+      <span>
+        <strong>WordGame</strong>
+        <small>Web Practice</small>
+      </span>
+    </a>
+
+    <div id="connectionBadge" class="connection-badge connection-badge--loading">
+      <span class="status-dot"></span>
+      <span id="connectionText">正在連接資料庫</span>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section id="setupView" class="setup-layout">
+      <div class="intro-panel">
+        <p class="eyebrow">PHASE 2 · FULL RANDOM</p>
+        <h1>選好今天的範圍，<br>開始不重複的練習。</h1>
+        <p class="intro-copy">
+          每輪會先把符合條件的単語隨機洗牌，全部練過後才開始下一輪。
+          這個階段仍然只讀取資料庫，不會更新熟練度。
         </p>
+
+        <dl class="database-summary">
+          <div>
+            <dt>可用單字</dt>
+            <dd id="vocabularyCount">—</dd>
+          </div>
+          <div>
+            <dt>資料來源</dt>
+            <dd id="databaseName">WordGame.db</dd>
+          </div>
+        </dl>
       </div>
-      <div class="status-card" aria-live="polite">
-        <div class="status-heading">
-          <span id="statusDot" class="status-dot status-dot--loading"></span>
-          <span id="statusLabel">正在連接資料庫</span>
+
+      <form id="setupForm" class="settings-card">
+        <div class="card-heading">
+          <div>
+            <p class="step-label">01</p>
+            <h2>設定練習內容</h2>
+          </div>
+          <span class="read-only-badge">READ ONLY</span>
         </div>
-        <p id="statusMessage" class="status-message">請稍候……</p>
-        <button id="retryButton" class="secondary-button" type="button" hidden>
-          重新檢查
+
+        <fieldset class="form-section">
+          <legend>番号範圍</legend>
+          <div class="range-fields">
+            <label>
+              <span>從</span>
+              <input id="minNumber" name="minNumber" type="number" inputmode="numeric" required>
+            </label>
+            <span class="range-separator" aria-hidden="true">—</span>
+            <label>
+              <span>到</span>
+              <input id="maxNumber" name="maxNumber" type="number" inputmode="numeric" required>
+            </label>
+          </div>
+        </fieldset>
+
+        <label class="form-section">
+          <span class="field-label">單字類型</span>
+          <select id="vocabularyType" name="vocabularyType">
+            <option value="">全部類型</option>
+          </select>
+        </label>
+
+        <fieldset class="form-section">
+          <legend>出題方向</legend>
+          <div class="direction-options">
+            <label class="direction-option">
+              <input type="radio" name="direction" value="JpToCn" checked>
+              <span>
+                <strong>日文 → 讀音</strong>
+                <small>看到単語，輸入かな</small>
+              </span>
+            </label>
+            <label class="direction-option">
+              <input type="radio" name="direction" value="CnToJp">
+              <span>
+                <strong>中文 → 日文</strong>
+                <small>看到中文，輸入単語</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <p id="setupError" class="form-error" role="alert" hidden></p>
+        <button id="startButton" class="primary-button" type="submit" disabled>
+          開始完全隨機練習
         </button>
-      </div>
-    </header>
-
-    <section class="summary-grid" aria-label="資料庫摘要">
-      <article class="metric-card">
-        <p class="metric-label">Vocabulary</p>
-        <p id="vocabularyCount" class="metric-value">—</p>
-        <p class="metric-caption">目前可用單字</p>
-      </article>
-
-      <article class="detail-card">
-        <p class="metric-label">可用類型</p>
-        <div id="typeList" class="type-list">
-          <span class="type-placeholder">載入中</span>
-        </div>
-      </article>
-
-      <article class="detail-card detail-card--wide">
-        <p class="metric-label">唯讀資料來源</p>
-        <code id="databasePath" class="database-path">正在解析路徑……</code>
-      </article>
+      </form>
     </section>
 
-    <section class="next-step-card">
-      <div>
-        <p class="eyebrow">NEXT</p>
-        <h2>下一階段：完全隨機練習</h2>
-        <p>加入番号範圍、單字類型、翻譯方向與基本答題流程。</p>
+    <section id="practiceView" class="practice-view" hidden>
+      <div class="practice-toolbar">
+        <button id="endSessionButton" class="text-button" type="button">← 返回設定</button>
+        <div class="practice-progress" aria-label="目前進度">
+          <span>第 <strong id="roundNumber">1</strong> 輪</span>
+          <span><strong id="questionPosition">1</strong> / <strong id="questionTotal">—</strong></span>
+        </div>
       </div>
-      <span class="read-only-badge">READ ONLY</span>
+
+      <article class="question-card">
+        <div class="question-meta">
+          <span id="directionLabel" class="direction-label">日文 → 讀音</span>
+          <span>番号 <strong id="questionNumber">—</strong></span>
+        </div>
+
+        <div class="question-content">
+          <p class="question-caption">QUESTION</p>
+          <h2 id="questionPrompt" class="question-prompt">—</h2>
+        </div>
+
+        <form id="answerForm" class="answer-form">
+          <label for="answerInput">你的答案</label>
+          <div class="answer-row">
+            <input
+              id="answerInput"
+              name="answer"
+              type="text"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              enterkeyhint="done"
+              required>
+            <button id="submitAnswerButton" class="primary-button" type="submit">確認</button>
+          </div>
+        </form>
+
+        <p id="answerFeedback" class="answer-feedback" aria-live="polite"></p>
+
+        <section id="revealPanel" class="reveal-panel" hidden>
+          <dl>
+            <div>
+              <dt>答案</dt>
+              <dd id="revealedAnswer">—</dd>
+            </div>
+            <div>
+              <dt id="translationLabel">中文</dt>
+              <dd id="revealedTranslation">—</dd>
+            </div>
+            <div id="exampleRow">
+              <dt>例句</dt>
+              <dd id="revealedExample">—</dd>
+            </div>
+          </dl>
+        </section>
+
+        <div class="question-actions">
+          <button id="revealButton" class="secondary-button" type="button">不知道</button>
+          <button id="nextButton" class="primary-button" type="button" hidden>下一題</button>
+        </div>
+      </article>
+
+      <p class="keyboard-hint">Enter：確認答案／前往下一題</p>
     </section>
   </main>
 

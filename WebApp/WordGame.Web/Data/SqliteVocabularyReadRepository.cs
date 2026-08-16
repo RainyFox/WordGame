@@ -4,7 +4,7 @@ using WordGame.Web.Models;
 namespace WordGame.Web.Data;
 
 public sealed class SqliteVocabularyReadRepository(
-    IWordGameDatabasePathResolver pathResolver) : IVocabularyReadRepository
+    IReadOnlyWordGameConnectionFactory connectionFactory) : IVocabularyReadRepository
 {
     const string VocabularyCountSql = "SELECT COUNT(*) FROM Vocabulary";
     const string VocabularyTypesSql = """
@@ -18,34 +18,14 @@ public sealed class SqliteVocabularyReadRepository(
     public async Task<VocabularySummary> GetSummaryAsync(
         CancellationToken cancellationToken)
     {
-        string databasePath = pathResolver.GetDatabasePath();
-        EnsureDatabaseExists(databasePath);
-
-        await using SqliteConnection connection = CreateReadOnlyConnection(databasePath);
-        await connection.OpenAsync(cancellationToken);
+        await using SqliteConnection connection =
+            await connectionFactory.OpenAsync(cancellationToken);
 
         int count = await ReadVocabularyCountAsync(connection, cancellationToken);
         IReadOnlyList<string> types = await ReadVocabularyTypesAsync(
             connection,
             cancellationToken);
         return new VocabularySummary(count, types);
-    }
-
-    static void EnsureDatabaseExists(string databasePath)
-    {
-        if (!File.Exists(databasePath))
-            throw new FileNotFoundException("找不到 WordGame.db。", databasePath);
-    }
-
-    static SqliteConnection CreateReadOnlyConnection(string databasePath)
-    {
-        var connectionString = new SqliteConnectionStringBuilder
-        {
-            DataSource = databasePath,
-            Mode = SqliteOpenMode.ReadOnly,
-            Pooling = false
-        };
-        return new SqliteConnection(connectionString.ToString());
     }
 
     static async Task<int> ReadVocabularyCountAsync(
