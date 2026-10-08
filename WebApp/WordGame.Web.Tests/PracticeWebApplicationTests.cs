@@ -50,6 +50,7 @@ public sealed class PracticeWebApplicationTests
         Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalWrong);
         Assert.Equal(1, database.ReadProgress(3, PracticeDirection.JpToCn)!.TotalWrong);
         Assert.Equal(1, database.ReadProgress(4, PracticeDirection.JpToCn)!.TotalWrong);
+        Assert.Equal(4, await GetDailyCountAsync(client));
     }
 
     [Fact]
@@ -75,6 +76,7 @@ public sealed class PracticeWebApplicationTests
         StoredProgressRow? beforeSettlement = database.ReadProgress(
             2,
             PracticeDirection.JpToCn);
+        Assert.Equal(0, await GetDailyCountAsync(client));
         PracticeAnswerResponse correct = await SubmitAnswerAsync(
             client,
             session.SessionId,
@@ -91,6 +93,7 @@ public sealed class PracticeWebApplicationTests
         Assert.Equal(1, correct.Progress.TotalWrong);
         Assert.Equal(AnsweredAt.AddDays(1), correct.Progress.NextReview);
         Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalWrong);
+        Assert.Equal(1, await GetDailyCountAsync(client));
     }
 
     [Fact]
@@ -144,6 +147,7 @@ public sealed class PracticeWebApplicationTests
         Assert.Equal(HttpStatusCode.NoContent, untouchedEnd.StatusCode);
         Assert.Equal(1, database.ReadProgress(3, PracticeDirection.JpToCn)!.TotalWrong);
         Assert.Null(database.ReadProgress(4, PracticeDirection.JpToCn));
+        Assert.Equal(1, await GetDailyCountAsync(client));
     }
 
     [Fact]
@@ -222,6 +226,61 @@ public sealed class PracticeWebApplicationTests
         Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
         Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
         Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalCorrect);
+        Assert.Equal(1, await GetDailyCountAsync(client));
+    }
+
+    [Fact]
+    public async Task DailySummary_CountsRepeatsAcrossModesAndDirectionsAndSurvivesServerRestart()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using (WebApplicationFactory<Program> factory = CreateFactory(database))
+        {
+            using HttpClient client = factory.CreateClient();
+            byte[] before = database.ComputeHash();
+            Assert.Equal(0, await GetDailyCountAsync(client));
+            Assert.Equal(before, database.ComputeHash());
+            StartPracticeResponse randomSession = await StartSessionAsync(client, 2, 2);
+            await RevealAsync(client, randomSession.SessionId);
+            await GetNextQuestionAsync(client, randomSession.SessionId);
+            await SubmitAnswerAsync(client, randomSession.SessionId, "しゅうとく");
+            StartPracticeResponse reviewSession = await StartSessionAsync(
+                client, 2, 2, mode: "Proficiency", direction: "CnToJp");
+            await SubmitAnswerAsync(client, reviewSession.SessionId, "習得");
+            Assert.Equal(3, await GetDailyCountAsync(client));
+        }
+
+        await using WebApplicationFactory<Program> restarted = CreateFactory(database);
+        using HttpClient restartedClient = restarted.CreateClient();
+        Assert.Equal(3, await GetDailyCountAsync(restartedClient));
+        DailyPracticeSummary? nextDay = await restartedClient.GetFromJsonAsync<DailyPracticeSummary>(
+            "/api/practice/daily-summary?start=2026-08-17T00:00:00Z&end=2026-08-18T00:00:00Z");
+        Assert.NotNull(nextDay);
+        Assert.Equal(0, nextDay.CompletedQuestions);
+    }
+
+    [Theory]
+    [InlineData("2026-08-16T00:00:00Z", "2026-08-16T00:00:00Z")]
+    [InlineData("2026-08-17T00:00:00Z", "2026-08-16T00:00:00Z")]
+    [InlineData("2026-08-16T00:00:00Z", "2026-08-18T00:00:00Z")]
+    [InlineData("invalid", "2026-08-17T00:00:00Z")]
+    public async Task DailySummary_RejectsInvalidDateRange(string start, string end)
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+
+        HttpResponseMessage response = await client.GetAsync(
+            $"/api/practice/daily-summary?start={Uri.EscapeDataString(start)}&end={Uri.EscapeDataString(end)}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    static async Task<int> GetDailyCountAsync(HttpClient client)
+    {
+        DailyPracticeSummary? summary = await client.GetFromJsonAsync<DailyPracticeSummary>(
+            "/api/practice/daily-summary?start=2026-08-16T00:00:00Z&end=2026-08-17T00:00:00Z");
+        Assert.NotNull(summary);
+        return summary.CompletedQuestions;
     }
 
     static WebApplicationFactory<Program> CreateFactory(

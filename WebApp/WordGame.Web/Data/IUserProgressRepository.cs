@@ -4,6 +4,11 @@ namespace WordGame.Web.Data;
 
 public interface IUserProgressRepository
 {
+    Task<int> CountAnswersAsync(
+        DateTimeOffset startInclusive,
+        DateTimeOffset endExclusive,
+        CancellationToken cancellationToken);
+
     Task<UserProgressRecord> RecordAnswerAsync(
         int number,
         PracticeDirection direction,

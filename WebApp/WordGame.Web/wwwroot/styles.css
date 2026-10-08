@@ -98,6 +98,30 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.header-status {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.daily-practice {
+  display: inline-flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 9px 14px;
+  border: 1px solid #c6d8c9;
+  border-radius: 999px;
+  color: #35513f;
+  background: #e5efe7;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.daily-practice strong {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
@@ -681,6 +705,13 @@ select:focus {
 
   .app-header {
     padding: 20px 0;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .header-status {
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .connection-badge {

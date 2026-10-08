@@ -3,6 +3,8 @@ const elements = {
   connectionText: document.querySelector("#connectionText"),
   vocabularyCount: document.querySelector("#vocabularyCount"),
   databaseName: document.querySelector("#databaseName"),
+  todayPracticeSummary: document.querySelector("#todayPracticeSummary"),
+  todayPracticeCount: document.querySelector("#todayPracticeCount"),
   setupView: document.querySelector("#setupView"),
   setupForm: document.querySelector("#setupForm"),
   minNumber: document.querySelector("#minNumber"),
@@ -48,7 +50,8 @@ const state = {
   readyForNext: false,
   composingAnswer: false,
   requestInFlight: false,
-  selectedChoiceButton: null
+  selectedChoiceButton: null,
+  dailySummaryRequest: 0
 };
 
 const numberFormatter = new Intl.NumberFormat("zh-TW");
@@ -63,6 +66,34 @@ async function initialize() {
     populatePracticeOptions(options);
   } catch (error) {
     showConnectionError(error);
+  }
+  await refreshDailySummary();
+}
+
+function getTodayRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+async function refreshDailySummary() {
+  const requestId = ++state.dailySummaryRequest;
+  const range = getTodayRange();
+  const query = new URLSearchParams(range);
+  try {
+    const summary = await fetchJson(`/api/practice/daily-summary?${query}`, {
+      cache: "no-store"
+    });
+    if (requestId !== state.dailySummaryRequest || range.start !== getTodayRange().start)
+      return;
+    elements.todayPracticeCount.textContent = numberFormatter.format(summary.completedQuestions);
+    elements.todayPracticeSummary.title = "每完成一題計 1 題；同一單字重複練習也計入";
+  } catch (error) {
+    if (requestId !== state.dailySummaryRequest)
+      return;
+    elements.todayPracticeCount.textContent = "—";
+    elements.todayPracticeSummary.title = `今日統計暫時無法載入：${error.message}，稍後會自動重試。`;
   }
 }
 
@@ -140,6 +171,7 @@ async function startPractice(event) {
     state.direction = request.direction;
     showPracticeView();
     renderQuestion(response.question);
+    refreshDailySummary();
   } catch (error) {
     showSetupError(error.message);
   } finally {
@@ -350,6 +382,7 @@ function rejectChoice(button) {
 
 function showReveal(result) {
   state.readyForNext = true;
+  refreshDailySummary();
   showRecordedOutcome(result);
   const reveal = result.reveal;
   elements.revealedAnswer.textContent = reveal.answer;
@@ -444,6 +477,7 @@ async function endPractice() {
     elements.practiceView.hidden = true;
     elements.setupView.hidden = false;
     elements.startButton.focus();
+    refreshDailySummary();
   } catch (error) {
     showAnswerFeedback(error.message, "wrong");
   } finally {
@@ -535,6 +569,15 @@ document.querySelectorAll('input[name="mode"]').forEach(input => {
 });
 document.addEventListener("keydown", handleKeyboardShortcut);
 window.addEventListener("pagehide", abandonSessionOnPageHide);
+window.addEventListener("focus", refreshDailySummary);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden)
+    refreshDailySummary();
+});
+window.setInterval(() => {
+  if (!document.hidden)
+    refreshDailySummary();
+}, 60_000);
 
 function handleKeyboardShortcut(event) {
   if (event.repeat || state.composingAnswer)

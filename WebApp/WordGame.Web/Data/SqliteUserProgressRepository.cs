@@ -11,6 +11,19 @@ public sealed class SqliteUserProgressRepository(
 {
     const int MaximumProficiency = 5;
     const int IncorrectAnswerReviewDelayDays = 1;
+    const string RecordHistorySql = """
+        CREATE TABLE IF NOT EXISTS PracticeHistory (
+            Id INTEGER PRIMARY KEY,
+            Number INTEGER NOT NULL,
+            Mode TEXT NOT NULL,
+            AnsweredAt TEXT NOT NULL,
+            IsCorrect INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS IX_PracticeHistory_AnsweredAt
+            ON PracticeHistory (AnsweredAt);
+        INSERT INTO PracticeHistory (Number, Mode, AnsweredAt, IsCorrect)
+        VALUES ($number, $mode, $answeredAt, $isCorrect);
+        """;
     const string ReadProgressSql = """
         SELECT COALESCE(Proficiency, 0),
                COALESCE(TotalCorrect, 0),
@@ -66,8 +79,34 @@ public sealed class SqliteUserProgressRepository(
             isCorrect,
             answeredAt);
         await WriteProgressAsync(connection, transaction, updated, cancellationToken);
+        await RecordHistoryAsync(
+            connection, transaction, updated, isCorrect, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return updated;
+    }
+
+    public async Task<int> CountAnswersAsync(
+        DateTimeOffset startInclusive,
+        DateTimeOffset endExclusive,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteConnection connection =
+            await readConnectionFactory.OpenAsync(cancellationToken);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type = 'table' AND name = 'PracticeHistory'
+            """;
+        if (Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 0)
+            return 0;
+
+        command.CommandText = """
+            SELECT COUNT(*) FROM PracticeHistory
+            WHERE AnsweredAt >= $start AND AnsweredAt < $end
+            """;
+        command.Parameters.AddWithValue("$start", FormatTimestamp(startInclusive));
+        command.Parameters.AddWithValue("$end", FormatTimestamp(endExclusive));
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
     }
 
     public async Task<IReadOnlyList<ReviewCandidateProgress>> GetReviewCandidatesAsync(
@@ -150,6 +189,23 @@ public sealed class SqliteUserProgressRepository(
         command.Parameters.AddWithValue("$totalCorrect", progress.TotalCorrect);
         command.Parameters.AddWithValue("$totalWrong", progress.TotalWrong);
         command.Parameters.AddWithValue("$mode", progress.Direction.ToString());
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    static async Task RecordHistoryAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        UserProgressRecord progress,
+        bool isCorrect,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = RecordHistorySql;
+        command.Parameters.AddWithValue("$number", progress.Number);
+        command.Parameters.AddWithValue("$mode", progress.Direction.ToString());
+        command.Parameters.AddWithValue("$answeredAt", FormatTimestamp(progress.LastAnswer));
+        command.Parameters.AddWithValue("$isCorrect", isCorrect);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

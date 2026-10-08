@@ -7,7 +7,9 @@ It is kept outside `Assets` so Unity does not import or compile the web project.
 
 - Read vocabulary from `../WordGame.db`.
 - Do not modify the `Vocabulary` table from the practice application.
-- Read and update only `UserProgress` while practicing.
+- Update `UserProgress` and append completed answers to `PracticeHistory` while
+  practicing. The history table and its timestamp index are created automatically
+  with the first completed answer.
 - Do not run the Unity practice scene and the web practice server at the same time.
 
 ## Planned structure
@@ -39,6 +41,7 @@ Phase 5 provides an ASP.NET Core practice application that:
 - records `UserProgress` once per completed question;
 - treats a correct answer after any wrong attempt as one wrong result;
 - updates proficiency, answer totals, `LastAnswer`, and `NextReview`;
+- displays today's completed-question count in both setup and practice views;
 - prevents duplicate browser and server-side settlement requests;
 - explains when another application has locked the SQLite database;
 - serves the complete browser practice flow from `WordGame.Web/wwwroot`.
@@ -47,6 +50,24 @@ Practice sessions are kept in server memory and expire after eight hours of
 inactivity. Leaving after a wrong attempt records one wrong result; leaving an
 untouched question does not change progress. `Vocabulary` always remains
 read-only.
+
+### Daily practice count
+
+The header counts each settled question once across both modes and directions.
+Repeating a word counts again; retries within one question do not. Revealing an
+answer or leaving after a wrong attempt also counts as one completed question,
+matching the existing progress rules. Untouched questions do not count.
+
+Each settlement appends a UTC timestamp to `PracticeHistory` in the same
+transaction as its progress update. `/api/practice/daily-summary?start=...&end=...`
+counts timestamps from the inclusive start to the exclusive end. The browser
+sends its local midnight boundaries, including daylight-saving changes, and
+refreshes after settlements, on returning to the page, and every minute while
+visible. Counts survive page refreshes and server restarts.
+
+Daily counts start with this feature's first recorded answer. Existing
+`LastAnswer` values cannot recover repeated answers from before the update.
+Answers made in the Unity application are not added to the web history.
 
 ### Proficiency review selection
 

@@ -11,12 +11,33 @@ public static class PracticeEndpoints
     {
         RouteGroupBuilder group = endpoints.MapGroup("/api/practice");
         group.MapGet("/options", GetOptionsAsync);
+        group.MapGet("/daily-summary", GetDailySummaryAsync);
         group.MapPost("/sessions", StartSessionAsync);
         group.MapPost("/sessions/{sessionId:guid}/answer", SubmitAnswerAsync);
         group.MapPost("/sessions/{sessionId:guid}/reveal", RevealAnswerAsync);
         group.MapPost("/sessions/{sessionId:guid}/next", GetNextQuestionAsync);
         group.MapDelete("/sessions/{sessionId:guid}", EndSession);
         return endpoints;
+    }
+
+    static async Task<IResult> GetDailySummaryAsync(
+        DateTimeOffset start,
+        DateTimeOffset end,
+        IUserProgressRepository repository,
+        CancellationToken cancellationToken)
+    {
+        if (end <= start || end - start > TimeSpan.FromHours(25))
+            return Results.BadRequest(new ApiErrorResponse("日期範圍無效。"));
+
+        try
+        {
+            int count = await repository.CountAnswersAsync(start, end, cancellationToken);
+            return Results.Ok(new DailyPracticeSummary(count));
+        }
+        catch (Exception exception)
+        {
+            return MapException(exception);
+        }
     }
 
     static async Task<IResult> GetOptionsAsync(

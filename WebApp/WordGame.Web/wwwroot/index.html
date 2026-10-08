@@ -17,9 +17,16 @@
       </span>
     </a>
 
-    <div id="connectionBadge" class="connection-badge connection-badge--loading">
-      <span class="status-dot"></span>
-      <span id="connectionText">正在連接資料庫</span>
+    <div class="header-status">
+      <div id="todayPracticeSummary" class="daily-practice" role="status"
+           title="每完成一題計 1 題；同一單字重複練習也計入">
+        <span>今日練習</span>
+        <span><strong id="todayPracticeCount">—</strong> 題</span>
+      </div>
+      <div id="connectionBadge" class="connection-badge connection-badge--loading">
+        <span class="status-dot"></span>
+        <span id="connectionText">正在連接資料庫</span>
+      </div>
     </div>
   </header>
 
