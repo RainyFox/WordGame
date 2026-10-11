@@ -40,6 +40,7 @@ const elements = {
   resultProficiency: document.querySelector("#resultProficiency"),
   resultNextReview: document.querySelector("#resultNextReview"),
   revealButton: document.querySelector("#revealButton"),
+  markWrongButton: document.querySelector("#markWrongButton"),
   nextButton: document.querySelector("#nextButton")
 };
 
@@ -48,6 +49,7 @@ const state = {
   mode: "FullRandom",
   direction: "JpToCn",
   readyForNext: false,
+  answerId: null,
   composingAnswer: false,
   requestInFlight: false,
   selectedChoiceButton: null,
@@ -208,6 +210,8 @@ function showPracticeView() {
 
 function renderQuestion(question) {
   state.readyForNext = false;
+  state.answerId = null;
+  elements.markWrongButton.hidden = true;
   state.mode = question.mode;
   renderQuestionProgress(question);
   elements.questionNumber.textContent = question.number;
@@ -382,6 +386,8 @@ function rejectChoice(button) {
 
 function showReveal(result) {
   state.readyForNext = true;
+  state.answerId = result.answerId;
+  elements.markWrongButton.hidden = result.recordedOutcome !== "Correct";
   refreshDailySummary();
   showRecordedOutcome(result);
   const reveal = result.reveal;
@@ -399,6 +405,30 @@ function showReveal(result) {
   setMultipleChoiceVisibility(false, false);
   elements.nextButton.hidden = false;
   elements.nextButton.focus();
+}
+
+async function markAnswerWrong() {
+  if (!state.readyForNext || !state.answerId || elements.markWrongButton.hidden || !beginRequest())
+    return;
+
+  elements.nextButton.disabled = true;
+  setButtonBusy(elements.markWrongButton, true, "正在修改……");
+  try {
+    const result = await fetchJson(sessionUrl("mark-wrong"), {
+      method: "POST",
+      body: JSON.stringify({ answerId: state.answerId })
+    });
+    showReveal(result);
+    showAnswerFeedback("已改為錯誤，本題仍只計一次。", "wrong");
+  } catch (error) {
+    showAnswerFeedback(error.message, "wrong");
+  } finally {
+    setButtonBusy(elements.markWrongButton, false);
+    elements.nextButton.disabled = false;
+    finishRequest();
+    if (elements.markWrongButton.hidden)
+      elements.nextButton.focus();
+  }
 }
 
 function renderQuestionProgress(question) {
@@ -504,11 +534,15 @@ function beginRequest() {
   if (state.requestInFlight)
     return false;
   state.requestInFlight = true;
+  elements.markWrongButton.disabled = true;
+  elements.endSessionButton.disabled = true;
   return true;
 }
 
 function finishRequest() {
   state.requestInFlight = false;
+  elements.markWrongButton.disabled = false;
+  elements.endSessionButton.disabled = false;
 }
 
 function setButtonBusy(button, busy, busyText = "處理中……") {
@@ -561,6 +595,7 @@ elements.answerInput.addEventListener("compositionend", () => {
   state.composingAnswer = false;
 });
 elements.revealButton.addEventListener("click", revealAnswer);
+elements.markWrongButton.addEventListener("click", markAnswerWrong);
 elements.toggleChoicesButton.addEventListener("click", toggleMultipleChoices);
 elements.nextButton.addEventListener("click", loadNextQuestion);
 elements.endSessionButton.addEventListener("click", endPractice);

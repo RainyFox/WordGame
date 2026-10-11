@@ -208,4 +208,32 @@ public sealed class SqliteUserProgressRepositoryTests
             new SqliteReadOnlyWordGameConnectionFactory(pathResolver),
             new SqliteReadWriteWordGameConnectionFactory(pathResolver));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task MarkAnswerWrongAsync_ReplacesCorrectResultUsingOriginalProficiency(int previousProficiency)
+    {
+        using var database = new TemporaryWordGameDatabase();
+        SqliteUserProgressRepository repository = CreateRepository(database.DatabasePath);
+        for (int i = 0; i < previousProficiency; i++)
+            await repository.RecordAnswerAsync(
+                2, PracticeDirection.JpToCn, true, AnsweredAt, CancellationToken.None);
+        UserProgressRecord correct = await repository.RecordAnswerAsync(
+            2, PracticeDirection.JpToCn, true, AnsweredAt, CancellationToken.None);
+
+        UserProgressRecord corrected = await repository.MarkAnswerWrongAsync(correct, CancellationToken.None);
+
+        Assert.Equal(Math.Max(previousProficiency - 1, 0), corrected.Proficiency);
+        Assert.Equal(correct.TotalCorrect - 1, corrected.TotalCorrect);
+        Assert.Equal(1, corrected.TotalWrong);
+        Assert.Equal(correct.LastAnswer, corrected.LastAnswer);
+        Assert.Equal(AnsweredAt.AddDays(1), corrected.NextReview);
+        Assert.Equal(correct.AnswerId, corrected.AnswerId);
+        Assert.Equal(corrected.Proficiency, database.ReadProgress(2, PracticeDirection.JpToCn)!.Proficiency);
+        Assert.Equal(previousProficiency + 1, await repository.CountAnswersAsync(
+            AnsweredAt.AddHours(-12), AnsweredAt.AddHours(12), CancellationToken.None));
+    }
 }

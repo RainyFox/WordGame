@@ -40,6 +40,7 @@ Phase 5 provides an ASP.NET Core practice application that:
   automatic focus, and IME-safe Enter handling;
 - records `UserProgress` once per completed question;
 - treats a correct answer after any wrong attempt as one wrong result;
+- allows marking the current correct answer as wrong after viewing its meaning;
 - updates proficiency, answer totals, `LastAnswer`, and `NextReview`;
 - displays today's completed-question count in both setup and practice views;
 - prevents duplicate browser and server-side settlement requests;
@@ -68,6 +69,18 @@ visible. Counts survive page refreshes and server restarts.
 Daily counts start with this feature's first recorded answer. Existing
 `LastAnswer` values cannot recover repeated answers from before the update.
 Answers made in the Unity application are not added to the web history.
+
+### Correcting a result
+
+After a correct answer is revealed, the "這題算錯" button can change that
+question's result to wrong before advancing. It removes the correct credit and
+adds one wrong credit, calculates proficiency from the value before the answer
+(including the zero and maximum boundaries), and schedules review one day after
+the original answer time. It updates the existing history row and preserves the
+answer timestamp and daily count. Already-wrong questions cannot be corrected
+again. Corrections and progress updates share a transaction; duplicate or stale
+requests are rejected. If another session has since practiced the same word in
+the same direction, correction is rejected to preserve the newer progress.
 
 ### Proficiency review selection
 

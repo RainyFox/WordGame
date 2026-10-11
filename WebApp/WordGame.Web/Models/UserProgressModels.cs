@@ -7,7 +7,11 @@ public sealed record UserProgressRecord(
     DateTimeOffset LastAnswer,
     DateTimeOffset NextReview,
     int TotalCorrect,
-    int TotalWrong);
+    int TotalWrong)
+{
+    public long AnswerId { get; init; }
+    public int PreviousProficiency { get; init; }
+}
 
 public sealed record ReviewCandidateProgress(
     int Number,

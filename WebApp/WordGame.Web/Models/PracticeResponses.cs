@@ -22,7 +22,8 @@ public sealed record PracticeAnswerResponse(
     bool IsCorrect,
     PracticeOutcome? RecordedOutcome,
     PracticeRevealResponse? Reveal,
-    UserProgressResponse? Progress);
+    UserProgressResponse? Progress,
+    long? AnswerId = null);
 
 public sealed record PracticeRevealResponse(
     string Answer,

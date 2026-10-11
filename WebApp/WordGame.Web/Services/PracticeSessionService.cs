@@ -101,6 +101,33 @@ public sealed class PracticeSessionService(
         cache.Remove(sessionId);
     }
 
+    public async Task<PracticeAnswerResponse> MarkAnswerWrongAsync(
+        Guid sessionId,
+        MarkPracticeAnswerWrongRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.AnswerId <= 0)
+            throw new PracticeValidationException("作答紀錄無效。");
+        PracticeSession session = GetSession(sessionId);
+        UserProgressRecord correctAnswer = session.BeginMarkWrong(request.AnswerId);
+        try
+        {
+            VocabularyEntry vocabulary = await GetVocabularyAsync(
+                correctAnswer.Number, cancellationToken);
+            UserProgressRecord corrected = await progressRepository.MarkAnswerWrongAsync(
+                correctAnswer, cancellationToken);
+            session.CompleteSettlement(corrected, PracticeOutcome.Wrong);
+            return new PracticeAnswerResponse(
+                false, PracticeOutcome.Wrong, CreateReveal(session.Direction, vocabulary),
+                CreateProgressResponse(corrected), corrected.AnswerId);
+        }
+        catch
+        {
+            session.CancelSettlement(correctAnswer.Number);
+            throw;
+        }
+    }
+
     async Task<IReadOnlyList<int>> LoadFullRandomCandidatesAsync(
         VocabularyFilter filter,
         CancellationToken cancellationToken)
@@ -178,7 +205,8 @@ public sealed class PracticeSessionService(
             currentAnswerIsCorrect,
             settlement.Outcome,
             CreateReveal(session.Direction, vocabulary),
-            CreateProgressResponse(progress));
+            CreateProgressResponse(progress),
+            progress.AnswerId);
     }
 
     async Task<UserProgressRecord> RecordSettlementAsync(
@@ -194,7 +222,7 @@ public sealed class PracticeSessionService(
                 settlement.Outcome == PracticeOutcome.Correct,
                 timeProvider.GetUtcNow(),
                 cancellationToken);
-            session.CompleteSettlement(settlement.Number);
+            session.CompleteSettlement(progress, settlement.Outcome);
             return progress;
         }
         catch

@@ -24,4 +24,9 @@ public interface IPracticeSessionService
     Task EndAsync(
         Guid sessionId,
         CancellationToken cancellationToken);
+
+    Task<PracticeAnswerResponse> MarkAnswerWrongAsync(
+        Guid sessionId,
+        MarkPracticeAnswerWrongRequest request,
+        CancellationToken cancellationToken);
 }

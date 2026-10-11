@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using WordGame.Web.Models;
 using WordGame.Web.Tests.Support;
 
@@ -281,6 +282,167 @@ public sealed class PracticeWebApplicationTests
             "/api/practice/daily-summary?start=2026-08-16T00:00:00Z&end=2026-08-17T00:00:00Z");
         Assert.NotNull(summary);
         return summary.CompletedQuestions;
+    }
+
+    [Theory]
+    [InlineData("FullRandom", "JpToCn", "ととのう", 2, 4, 2)]
+    [InlineData("Proficiency", "JpToCn", "ととのう", 2, 4, 2)]
+    [InlineData("FullRandom", "CnToJp", "整う", 0, 0, 1)]
+    [InlineData("Proficiency", "CnToJp", "整う", 0, 0, 1)]
+    public async Task MarkWrong_UpdatesProgressAndExistingHistoryAcrossModesAndDirections(
+        string mode, string direction, string answer,
+        int expectedProficiency, int expectedCorrect, int expectedWrong)
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+        StartPracticeResponse session = await StartSessionAsync(client, 1, 1, mode, direction);
+        PracticeAnswerResponse correct = await SubmitAnswerAsync(client, session.SessionId, answer);
+
+        HttpResponseMessage response = await PostMarkWrongAsync(client, session.SessionId, correct.AnswerId!.Value);
+        response.EnsureSuccessStatusCode();
+        PracticeAnswerResponse? corrected = await response.Content.ReadFromJsonAsync<PracticeAnswerResponse>(JsonOptions);
+
+        Assert.NotNull(corrected);
+        Assert.Equal(PracticeOutcome.Wrong, corrected.RecordedOutcome);
+        Assert.NotNull(corrected.Progress);
+        Assert.Equal(expectedProficiency, corrected.Progress.Proficiency);
+        Assert.Equal(expectedCorrect, corrected.Progress.TotalCorrect);
+        Assert.Equal(expectedWrong, corrected.Progress.TotalWrong);
+        Assert.Equal(correct.Progress!.LastAnswer, corrected.Progress.LastAnswer);
+        Assert.Equal(AnsweredAt.AddDays(1), corrected.Progress.NextReview);
+        Assert.Equal(correct.AnswerId, corrected.AnswerId);
+        Assert.Equal(0, ReadHistoryResult(database, corrected.AnswerId!.Value));
+        Assert.Equal(1, await GetDailyCountAsync(client));
+        if (direction == "CnToJp")
+            Assert.Equal(3, database.ReadProgress(1, PracticeDirection.JpToCn)!.Proficiency);
+
+        await GetNextQuestionAsync(client, session.SessionId);
+    }
+
+    [Fact]
+    public async Task MarkWrong_RejectsUnansweredAndAlreadyWrongQuestions()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+        StartPracticeResponse session = await StartSessionAsync(client, 2, 2);
+        Assert.Equal(HttpStatusCode.Conflict, (await PostMarkWrongAsync(client, session.SessionId, 1)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostMarkWrongAsync(client, session.SessionId, 0)).StatusCode);
+        await SubmitAnswerAsync(client, session.SessionId, "wrong");
+        PracticeAnswerResponse settled = await SubmitAnswerAsync(client, session.SessionId, "しゅうとく");
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await PostMarkWrongAsync(client, session.SessionId, settled.AnswerId!.Value)).StatusCode);
+        Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalWrong);
+        Assert.Equal(1, await GetDailyCountAsync(client));
+    }
+
+    [Fact]
+    public async Task MarkWrong_RejectsStaleAnswerIdWhenSameWordRepeats()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+        StartPracticeResponse session = await StartSessionAsync(client, 2, 2);
+        PracticeAnswerResponse first = await SubmitAnswerAsync(client, session.SessionId, "しゅうとく");
+        await GetNextQuestionAsync(client, session.SessionId);
+        PracticeAnswerResponse second = await SubmitAnswerAsync(client, session.SessionId, "しゅうとく");
+
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await PostMarkWrongAsync(client, session.SessionId, first.AnswerId!.Value)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await PostMarkWrongAsync(client, session.SessionId, second.AnswerId!.Value)).StatusCode);
+        Assert.Equal(1, ReadHistoryResult(database, first.AnswerId.Value));
+        Assert.Equal(0, ReadHistoryResult(database, second.AnswerId.Value));
+        Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalCorrect);
+        Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalWrong);
+        Assert.Equal(2, await GetDailyCountAsync(client));
+    }
+
+    [Fact]
+    public async Task MarkWrong_ConcurrentRequestsCorrectOnlyOnce()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+        StartPracticeResponse session = await StartSessionAsync(client, 2, 2);
+        PracticeAnswerResponse correct = await SubmitAnswerAsync(client, session.SessionId, "しゅうとく");
+
+        HttpResponseMessage[] responses = await Task.WhenAll(
+            PostMarkWrongAsync(client, session.SessionId, correct.AnswerId!.Value),
+            PostMarkWrongAsync(client, session.SessionId, correct.AnswerId.Value));
+
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
+        Assert.Equal(0, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalCorrect);
+        Assert.Equal(1, database.ReadProgress(2, PracticeDirection.JpToCn)!.TotalWrong);
+        Assert.Equal(1, await GetDailyCountAsync(client));
+    }
+
+    [Fact]
+    public async Task MarkWrong_DoesNotOverwriteNewerProgressFromAnotherSession()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+        StartPracticeResponse firstSession = await StartSessionAsync(client, 2, 2);
+        PracticeAnswerResponse first = await SubmitAnswerAsync(client, firstSession.SessionId, "しゅうとく");
+        StartPracticeResponse secondSession = await StartSessionAsync(client, 2, 2);
+        await SubmitAnswerAsync(client, secondSession.SessionId, "しゅうとく");
+        StoredProgressRow? before = database.ReadProgress(2, PracticeDirection.JpToCn);
+
+        Assert.Equal(HttpStatusCode.Conflict,
+            (await PostMarkWrongAsync(client, firstSession.SessionId, first.AnswerId!.Value)).StatusCode);
+        Assert.Equal(before, database.ReadProgress(2, PracticeDirection.JpToCn));
+        Assert.Equal(1, ReadHistoryResult(database, first.AnswerId.Value));
+        Assert.Equal(2, await GetDailyCountAsync(client));
+    }
+
+    [Fact]
+    public async Task MarkWrong_WriteFailureRollsBackBothTablesAndAllowsRetry()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> factory = CreateFactory(database);
+        using HttpClient client = factory.CreateClient();
+        StartPracticeResponse session = await StartSessionAsync(client, 2, 2);
+        PracticeAnswerResponse correct = await SubmitAnswerAsync(client, session.SessionId, "しゅうとく");
+        StoredProgressRow? before = database.ReadProgress(2, PracticeDirection.JpToCn);
+        using var connection = new SqliteConnection($"Data Source={database.DatabasePath};Pooling=False");
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = """
+            CREATE TRIGGER FailCorrection BEFORE UPDATE ON UserProgress
+            WHEN NEW.TotalWrong > OLD.TotalWrong
+            BEGIN SELECT RAISE(ABORT, 'test correction failure'); END;
+            """;
+        command.ExecuteNonQuery();
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable,
+            (await PostMarkWrongAsync(client, session.SessionId, correct.AnswerId!.Value)).StatusCode);
+        Assert.Equal(before, database.ReadProgress(2, PracticeDirection.JpToCn));
+        Assert.Equal(1, ReadHistoryResult(database, correct.AnswerId.Value));
+        command.CommandText = "DROP TRIGGER FailCorrection";
+        command.ExecuteNonQuery();
+
+        Assert.Equal(HttpStatusCode.OK,
+            (await PostMarkWrongAsync(client, session.SessionId, correct.AnswerId.Value)).StatusCode);
+        Assert.Equal(0, ReadHistoryResult(database, correct.AnswerId.Value));
+        Assert.Equal(1, await GetDailyCountAsync(client));
+    }
+
+    static Task<HttpResponseMessage> PostMarkWrongAsync(HttpClient client, Guid sessionId, long answerId)
+    {
+        return client.PostAsJsonAsync($"/api/practice/sessions/{sessionId}/mark-wrong", new { answerId });
+    }
+
+    static int ReadHistoryResult(TemporaryWordGameDatabase database, long answerId)
+    {
+        using var connection = new SqliteConnection($"Data Source={database.DatabasePath};Mode=ReadOnly;Pooling=False");
+        connection.Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT IsCorrect FROM PracticeHistory WHERE Id = $id";
+        command.Parameters.AddWithValue("$id", answerId);
+        return Convert.ToInt32(command.ExecuteScalar());
     }
 
     static WebApplicationFactory<Program> CreateFactory(

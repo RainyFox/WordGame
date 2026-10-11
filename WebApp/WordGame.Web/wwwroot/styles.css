@@ -398,6 +398,11 @@ select:focus {
   background: rgba(38, 58, 48, 0.06);
 }
 
+.mark-wrong-button {
+  border-color: #d4a69f;
+  color: #9b4941;
+}
+
 .text-button {
   padding: 8px 0;
   color: #526158;
@@ -668,6 +673,8 @@ select:focus {
 
 .question-actions {
   display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
   max-width: 620px;
   margin: 24px auto 0;
   justify-content: flex-end;

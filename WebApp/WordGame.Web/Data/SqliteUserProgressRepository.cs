@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using WordGame.Web.Models;
+using WordGame.Web.Services;
 
 namespace WordGame.Web.Data;
 
@@ -23,6 +24,7 @@ public sealed class SqliteUserProgressRepository(
             ON PracticeHistory (AnsweredAt);
         INSERT INTO PracticeHistory (Number, Mode, AnsweredAt, IsCorrect)
         VALUES ($number, $mode, $answeredAt, $isCorrect);
+        SELECT last_insert_rowid();
         """;
     const string ReadProgressSql = """
         SELECT COALESCE(Proficiency, 0),
@@ -79,10 +81,52 @@ public sealed class SqliteUserProgressRepository(
             isCorrect,
             answeredAt);
         await WriteProgressAsync(connection, transaction, updated, cancellationToken);
-        await RecordHistoryAsync(
+        long answerId = await RecordHistoryAsync(
             connection, transaction, updated, isCorrect, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return updated;
+        return updated with { AnswerId = answerId };
+    }
+
+    public async Task<UserProgressRecord> MarkAnswerWrongAsync(
+        UserProgressRecord correctAnswer,
+        CancellationToken cancellationToken)
+    {
+        await using SqliteConnection connection =
+            await writeConnectionFactory.OpenAsync(cancellationToken);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        StoredProgress current = await ReadProgressAsync(
+            connection, transaction, correctAnswer.Number, correctAnswer.Direction,
+            cancellationToken);
+        if (current.Proficiency != correctAnswer.Proficiency ||
+            current.TotalCorrect != correctAnswer.TotalCorrect ||
+            current.TotalWrong != correctAnswer.TotalWrong)
+        {
+            throw new PracticeStateException("本題之後已有新的練習紀錄，無法修改。");
+        }
+
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE PracticeHistory SET IsCorrect = 0
+            WHERE Id = $id AND Number = $number AND Mode = $mode AND IsCorrect = 1
+            """;
+        command.Parameters.AddWithValue("$id", correctAnswer.AnswerId);
+        command.Parameters.AddWithValue("$number", correctAnswer.Number);
+        command.Parameters.AddWithValue("$mode", correctAnswer.Direction.ToString());
+        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+            throw new PracticeStateException("本題已記錄為錯誤，或作答紀錄已變更。");
+
+        UserProgressRecord corrected = correctAnswer with
+        {
+            Proficiency = Math.Max(correctAnswer.PreviousProficiency - 1, 0),
+            NextReview = correctAnswer.LastAnswer.AddDays(IncorrectAnswerReviewDelayDays),
+            TotalCorrect = correctAnswer.TotalCorrect - 1,
+            TotalWrong = correctAnswer.TotalWrong + 1
+        };
+        await WriteProgressAsync(connection, transaction, corrected, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return corrected;
     }
 
     public async Task<int> CountAnswersAsync(
@@ -170,7 +214,10 @@ public sealed class SqliteUserProgressRepository(
             normalizedAnswerTime,
             normalizedAnswerTime.AddDays(reviewDelayDays),
             totalCorrect,
-            totalWrong);
+            totalWrong)
+        {
+            PreviousProficiency = current.Proficiency
+        };
     }
 
     static async Task WriteProgressAsync(
@@ -192,7 +239,7 @@ public sealed class SqliteUserProgressRepository(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    static async Task RecordHistoryAsync(
+    static async Task<long> RecordHistoryAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         UserProgressRecord progress,
@@ -206,7 +253,7 @@ public sealed class SqliteUserProgressRepository(
         command.Parameters.AddWithValue("$mode", progress.Direction.ToString());
         command.Parameters.AddWithValue("$answeredAt", FormatTimestamp(progress.LastAnswer));
         command.Parameters.AddWithValue("$isCorrect", isCorrect);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken));
     }
 
     static async Task<IReadOnlyList<ReviewCandidateProgress>> ReadReviewCandidatesAsync(

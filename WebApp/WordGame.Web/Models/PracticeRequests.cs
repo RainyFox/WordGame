@@ -8,3 +8,5 @@ public sealed record StartPracticeRequest(
     PracticeDirection Direction);
 
 public sealed record SubmitPracticeAnswerRequest(string? Answer);
+
+public sealed record MarkPracticeAnswerWrongRequest(long AnswerId);

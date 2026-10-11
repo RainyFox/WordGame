@@ -10,6 +10,8 @@ internal sealed class PracticeSession
     bool currentQuestionCompleted = true;
     bool hadWrongAttempt;
     bool settlementInProgress;
+    UserProgressRecord? settledProgress;
+    PracticeOutcome? recordedOutcome;
 
     public PracticeSession(
         StartPracticeRequest request,
@@ -91,6 +93,7 @@ internal sealed class PracticeSession
     {
         lock (syncRoot)
         {
+            EnsureNoSettlementInProgress();
             if (!currentNumber.HasValue || currentQuestionCompleted || !hadWrongAttempt)
                 return null;
 
@@ -100,13 +103,30 @@ internal sealed class PracticeSession
         }
     }
 
-    public void CompleteSettlement(int expectedNumber)
+    public UserProgressRecord BeginMarkWrong(long answerId)
     {
         lock (syncRoot)
         {
-            EnsureSettlementMatches(expectedNumber);
+            EnsureNoSettlementInProgress();
+            if (!currentQuestionCompleted || settledProgress is null ||
+                settledProgress.AnswerId != answerId || recordedOutcome != PracticeOutcome.Correct)
+            {
+                throw new PracticeStateException("只能將目前已答對的題目改為錯誤。");
+            }
+            settlementInProgress = true;
+            return settledProgress;
+        }
+    }
+
+    public void CompleteSettlement(UserProgressRecord progress, PracticeOutcome outcome)
+    {
+        lock (syncRoot)
+        {
+            EnsureSettlementMatches(progress.Number);
             settlementInProgress = false;
             currentQuestionCompleted = true;
+            settledProgress = progress;
+            recordedOutcome = outcome;
         }
     }
 
@@ -125,12 +145,13 @@ internal sealed class PracticeSession
         currentQuestionCompleted = false;
         hadWrongAttempt = false;
         settlementInProgress = false;
+        settledProgress = null;
+        recordedOutcome = null;
     }
 
     void EnsureReadyForNextQuestion()
     {
-        if (settlementInProgress)
-            throw new PracticeStateException("正在儲存目前題目的結果。");
+        EnsureNoSettlementInProgress();
         if (currentNumber.HasValue && !currentQuestionCompleted)
             throw new PracticeStateException("請先答對或顯示目前題目的答案。");
     }
@@ -146,6 +167,11 @@ internal sealed class PracticeSession
     {
         if (!currentNumber.HasValue || currentQuestionCompleted)
             throw new PracticeStateException("目前沒有等待作答的題目。");
+        EnsureNoSettlementInProgress();
+    }
+
+    void EnsureNoSettlementInProgress()
+    {
         if (settlementInProgress)
             throw new PracticeStateException("正在儲存目前題目的結果。");
     }

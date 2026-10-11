@@ -20,4 +20,8 @@ public interface IUserProgressRepository
         VocabularyFilter filter,
         PracticeDirection direction,
         CancellationToken cancellationToken);
+
+    Task<UserProgressRecord> MarkAnswerWrongAsync(
+        UserProgressRecord correctAnswer,
+        CancellationToken cancellationToken);
 }

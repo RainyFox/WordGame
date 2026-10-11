@@ -15,6 +15,7 @@ public static class PracticeEndpoints
         group.MapPost("/sessions", StartSessionAsync);
         group.MapPost("/sessions/{sessionId:guid}/answer", SubmitAnswerAsync);
         group.MapPost("/sessions/{sessionId:guid}/reveal", RevealAnswerAsync);
+        group.MapPost("/sessions/{sessionId:guid}/mark-wrong", MarkAnswerWrongAsync);
         group.MapPost("/sessions/{sessionId:guid}/next", GetNextQuestionAsync);
         group.MapDelete("/sessions/{sessionId:guid}", EndSession);
         return endpoints;
@@ -131,6 +132,22 @@ public static class PracticeEndpoints
         {
             await service.EndAsync(sessionId, cancellationToken);
             return Results.NoContent();
+        }
+        catch (Exception exception)
+        {
+            return MapException(exception);
+        }
+    }
+
+    static async Task<IResult> MarkAnswerWrongAsync(
+        Guid sessionId,
+        MarkPracticeAnswerWrongRequest request,
+        IPracticeSessionService service,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Results.Ok(await service.MarkAnswerWrongAsync(sessionId, request, cancellationToken));
         }
         catch (Exception exception)
         {
