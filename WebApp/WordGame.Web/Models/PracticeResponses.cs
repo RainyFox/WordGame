@@ -3,7 +3,10 @@ namespace WordGame.Web.Models;
 public sealed record PracticeOptionsResponse(
     int MinNumber,
     int MaxNumber,
-    IReadOnlyList<string> Types);
+    IReadOnlyList<string> Types)
+{
+    public double NewCandidateSelectionRate { get; init; }
+}
 
 public sealed record StartPracticeResponse(
     Guid SessionId,

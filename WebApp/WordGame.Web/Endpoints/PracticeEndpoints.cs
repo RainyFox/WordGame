@@ -47,7 +47,11 @@ public static class PracticeEndpoints
     {
         try
         {
-            return Results.Ok(await repository.GetOptionsAsync(cancellationToken));
+            PracticeOptionsResponse options = await repository.GetOptionsAsync(cancellationToken);
+            return Results.Ok(options with
+            {
+                NewCandidateSelectionRate = ProficiencyQuestionSelector.NewCandidateSelectionRate
+            });
         }
         catch (Exception exception)
         {

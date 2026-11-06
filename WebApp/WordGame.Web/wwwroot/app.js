@@ -10,6 +10,7 @@ const elements = {
   minNumber: document.querySelector("#minNumber"),
   maxNumber: document.querySelector("#maxNumber"),
   vocabularyType: document.querySelector("#vocabularyType"),
+  proficiencyModeDescription: document.querySelector("#proficiencyModeDescription"),
   setupError: document.querySelector("#setupError"),
   startButton: document.querySelector("#startButton"),
   practiceView: document.querySelector("#practiceView"),
@@ -57,12 +58,16 @@ const state = {
 };
 
 const numberFormatter = new Intl.NumberFormat("zh-TW");
+const percentFormatter = new Intl.NumberFormat("zh-TW", {
+  style: "percent",
+  maximumFractionDigits: 2
+});
 
 async function initialize() {
   try {
     const [health, options] = await Promise.all([
       fetchJson("/api/health"),
-      fetchJson("/api/practice/options")
+      fetchJson("/api/practice/options", { cache: "no-store" })
     ]);
     showConnectedState(health);
     populatePracticeOptions(options);
@@ -141,6 +146,11 @@ function populatePracticeOptions(options) {
   const typeOptions = options.types.map(createTypeOption);
   elements.vocabularyType.append(...typeOptions);
   elements.startButton.disabled = options.maxNumber === 0;
+
+  if (Number.isFinite(options.newCandidateSelectionRate)) {
+    const newQuestionRate = percentFormatter.format(options.newCandidateSelectionRate);
+    elements.proficiencyModeDescription.textContent = `新題 ${newQuestionRate}，其餘依到期日與逾期權重出題`;
+  }
 }
 
 function createTypeOption(type) {

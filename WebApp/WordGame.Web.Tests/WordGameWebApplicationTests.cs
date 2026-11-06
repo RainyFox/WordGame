@@ -1,13 +1,33 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using WordGame.Web.Models;
+using WordGame.Web.Services;
 using WordGame.Web.Tests.Support;
 
 namespace WordGame.Web.Tests;
 
 public sealed class WordGameWebApplicationTests
 {
+    [Fact]
+    public async Task PracticeOptions_ExposesTheConfiguredNewQuestionRate()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        byte[] before = database.ComputeHash();
+        await using WebApplicationFactory<Program> factory =
+            WordGameWebApplicationFactory.Create(database.DatabasePath);
+        using HttpClient client = factory.CreateClient();
+
+        JsonElement options = await client.GetFromJsonAsync<JsonElement>("/api/practice/options");
+
+        Assert.Equal(ProficiencyQuestionSelector.NewCandidateSelectionRate,
+            options.GetProperty("newCandidateSelectionRate").GetDouble());
+        Assert.Equal(1, options.GetProperty("minNumber").GetInt32());
+        Assert.Equal(4, options.GetProperty("maxNumber").GetInt32());
+        Assert.Equal(before, database.ComputeHash());
+    }
+
     [Fact]
     public async Task HealthAndSummaryEndpoints_ReadConfiguredDatabase()
     {

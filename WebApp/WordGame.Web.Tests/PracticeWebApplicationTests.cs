@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using WordGame.Web.Models;
+using WordGame.Web.Services;
 using WordGame.Web.Tests.Support;
 
 namespace WordGame.Web.Tests;
@@ -155,7 +156,8 @@ public sealed class PracticeWebApplicationTests
     public async Task ProficiencySession_SelectsDueThenNewCandidate()
     {
         using var database = new TemporaryWordGameDatabase();
-        var randomSource = new SequenceRandomSource([0.5, 0, 0, 0]);
+        var randomSource = new SequenceRandomSource(
+            [ProficiencyQuestionSelector.NewCandidateSelectionRate, 0, 0, 0]);
         await using WebApplicationFactory<Program> factory = CreateFactory(
             database,
             randomSource);

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
@@ -44,7 +44,7 @@ public class GameManager : MonoBehaviour
     RandomType randomType;
     UserProgress currentWordProgress;
     bool JpToCn = true;
-    const double NewCandidateSelectionRate = 0.15;
+    const double NewCandidateSelectionRate = 0.3;
     const string KanaColumnName = "かな";
     const string ReviewCandidateQueryTemplate = @"
         WITH subset AS (

@@ -9,14 +9,15 @@ public sealed class ProficiencyQuestionSelectorTests
         new(2026, 8, 16, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Select_UsesNewPoolBelowFifteenPercentBoundary()
+    public void Select_UsesConfiguredNewPoolBoundary()
     {
         ReviewCandidate[] candidates = CreateNewAndDueCandidates();
 
-        ReviewCandidate selectedNew = Select(candidates, 0.149, 0);
-        ReviewCandidate selectedDue = Select(candidates, 0.15, 0);
+        double rate = ProficiencyQuestionSelector.NewCandidateSelectionRate;
+        ReviewCandidate selectedNew = Select(candidates, Math.BitDecrement(rate), 0);
+        ReviewCandidate selectedDue = Select(candidates, rate, 0);
 
-        Assert.True(selectedNew.IsNew);
+        Assert.Equal(rate > 0, selectedNew.IsNew);
         Assert.False(selectedDue.IsNew);
     }
 
@@ -46,7 +47,7 @@ public sealed class ProficiencyQuestionSelectorTests
     }
 
     [Fact]
-    public void Select_DistributesNewAndDuePoolsAtFifteenToEightyFive()
+    public void Select_DistributesPoolsAccordingToConfiguredRate()
     {
         ReviewCandidate[] candidates = CreateNewAndDueCandidates();
         const int sampleCount = 10_000;
@@ -56,8 +57,9 @@ public sealed class ProficiencyQuestionSelectorTests
             sampleCount,
             candidate => candidate.IsNew);
 
-        Assert.Equal(1_500, newSelections);
-        Assert.Equal(8_500, sampleCount - newSelections);
+        double expectedNewSelections = sampleCount * ProficiencyQuestionSelector.NewCandidateSelectionRate;
+        Assert.InRange(newSelections,
+            (int)Math.Floor(expectedNewSelections), (int)Math.Ceiling(expectedNewSelections));
     }
 
     [Fact]

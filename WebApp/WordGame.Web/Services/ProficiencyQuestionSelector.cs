@@ -4,7 +4,7 @@ namespace WordGame.Web.Services;
 
 public static class ProficiencyQuestionSelector
 {
-    public const double NewCandidateSelectionRate = 0.15;
+    public const double NewCandidateSelectionRate = 0.3;
 
     public static ReviewCandidate Select(
         IReadOnlyList<ReviewCandidate> candidates,

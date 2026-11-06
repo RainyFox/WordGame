@@ -85,8 +85,14 @@ the same direction, correction is rejected to preserve the newer progress.
 ### Proficiency review selection
 
 - New and due questions are kept in separate pools.
-- When both pools contain candidates, a question comes from the new pool 15%
-  of the time and from the due pool 85% of the time.
+- When both pools contain candidates, the new-pool probability is set by
+  `ProficiencyQuestionSelector.NewCandidateSelectionRate`; the remaining
+  probability selects from the due pool.
+- `/api/practice/options` returns that same value as `newCandidateSelectionRate`,
+  and the settings screen formats it as a percentage. Changing the constant and
+  rebuilding/restarting the web server updates both selection and the UI.
+- Unity has a separate `NewCandidateSelectionRate` constant in
+  `Assets/Scripts/GameManager.cs`.
 - If either pool is empty, the other pool is used automatically.
 - Future questions have zero selection weight.
 - Due-question weight is `1 + log2(elapsed interval / scheduled interval)`.
