@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using System.Data.Common;
 using WordGame.Web.Models;
 
 namespace WordGame.Web.Data;
@@ -40,7 +40,7 @@ public sealed class SqlitePracticeVocabularyRepository(
     public async Task<PracticeOptionsResponse> GetOptionsAsync(
         CancellationToken cancellationToken)
     {
-        await using SqliteConnection connection =
+        await using DbConnection connection =
             await connectionFactory.OpenAsync(cancellationToken);
         (int minNumber, int maxNumber) = await ReadNumberRangeAsync(
             connection,
@@ -55,13 +55,13 @@ public sealed class SqlitePracticeVocabularyRepository(
         VocabularyFilter filter,
         CancellationToken cancellationToken)
     {
-        await using SqliteConnection connection =
+        await using DbConnection connection =
             await connectionFactory.OpenAsync(cancellationToken);
-        await using SqliteCommand command = connection.CreateCommand();
+        await using DbCommand command = connection.CreateCommand();
         command.CommandText = CandidateNumbersSql;
-        command.Parameters.AddWithValue("$minNumber", filter.MinNumber);
-        command.Parameters.AddWithValue("$maxNumber", filter.MaxNumber);
-        command.Parameters.AddWithValue("$type", (object?)filter.Type ?? DBNull.Value);
+        command.AddParameter("$minNumber", filter.MinNumber);
+        command.AddParameter("$maxNumber", filter.MaxNumber);
+        command.AddParameter("$type", (object?)filter.Type ?? DBNull.Value);
 
         return await ReadNumbersAsync(command, cancellationToken);
     }
@@ -70,13 +70,13 @@ public sealed class SqlitePracticeVocabularyRepository(
         int number,
         CancellationToken cancellationToken)
     {
-        await using SqliteConnection connection =
+        await using DbConnection connection =
             await connectionFactory.OpenAsync(cancellationToken);
-        await using SqliteCommand command = connection.CreateCommand();
+        await using DbCommand command = connection.CreateCommand();
         command.CommandText = VocabularyByNumberSql;
-        command.Parameters.AddWithValue("$number", number);
+        command.AddParameter("$number", number);
 
-        await using SqliteDataReader reader =
+        await using DbDataReader reader =
             await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken)
             ? ReadVocabulary(reader)
@@ -88,7 +88,7 @@ public sealed class SqlitePracticeVocabularyRepository(
         PracticeDirection direction,
         CancellationToken cancellationToken)
     {
-        await using SqliteConnection connection =
+        await using DbConnection connection =
             await connectionFactory.OpenAsync(cancellationToken);
         string correctAnswer = GetAnswer(direction, question);
         string? preferredType = string.IsNullOrWhiteSpace(question.Type)
@@ -119,24 +119,24 @@ public sealed class SqlitePracticeVocabularyRepository(
     }
 
     static async Task<(int MinNumber, int MaxNumber)> ReadNumberRangeAsync(
-        SqliteConnection connection,
+        DbConnection connection,
         CancellationToken cancellationToken)
     {
-        await using SqliteCommand command = connection.CreateCommand();
+        await using DbCommand command = connection.CreateCommand();
         command.CommandText = NumberRangeSql;
-        await using SqliteDataReader reader =
+        await using DbDataReader reader =
             await command.ExecuteReaderAsync(cancellationToken);
         await reader.ReadAsync(cancellationToken);
         return (reader.GetInt32(0), reader.GetInt32(1));
     }
 
     static async Task<IReadOnlyList<string>> ReadTypesAsync(
-        SqliteConnection connection,
+        DbConnection connection,
         CancellationToken cancellationToken)
     {
-        await using SqliteCommand command = connection.CreateCommand();
+        await using DbCommand command = connection.CreateCommand();
         command.CommandText = TypesSql;
-        await using SqliteDataReader reader =
+        await using DbDataReader reader =
             await command.ExecuteReaderAsync(cancellationToken);
 
         var types = new List<string>();
@@ -146,10 +146,10 @@ public sealed class SqlitePracticeVocabularyRepository(
     }
 
     static async Task<IReadOnlyList<int>> ReadNumbersAsync(
-        SqliteCommand command,
+        DbCommand command,
         CancellationToken cancellationToken)
     {
-        await using SqliteDataReader reader =
+        await using DbDataReader reader =
             await command.ExecuteReaderAsync(cancellationToken);
         var numbers = new List<int>();
         while (await reader.ReadAsync(cancellationToken))
@@ -158,20 +158,20 @@ public sealed class SqlitePracticeVocabularyRepository(
     }
 
     static async Task<IReadOnlyList<string>> ReadDistractorAnswersAsync(
-        SqliteConnection connection,
+        DbConnection connection,
         int questionNumber,
         string correctAnswer,
         PracticeDirection direction,
         string? type,
         CancellationToken cancellationToken)
     {
-        await using SqliteCommand command = connection.CreateCommand();
+        await using DbCommand command = connection.CreateCommand();
         command.CommandText = CreateDistractorAnswersSql(direction);
-        command.Parameters.AddWithValue("$number", questionNumber);
-        command.Parameters.AddWithValue("$correctAnswer", correctAnswer);
-        command.Parameters.AddWithValue("$type", (object?)type ?? DBNull.Value);
+        command.AddParameter("$number", questionNumber);
+        command.AddParameter("$correctAnswer", correctAnswer);
+        command.AddParameter("$type", (object?)type ?? DBNull.Value);
 
-        await using SqliteDataReader reader =
+        await using DbDataReader reader =
             await command.ExecuteReaderAsync(cancellationToken);
         var answers = new List<string>();
         while (await reader.ReadAsync(cancellationToken))
@@ -204,7 +204,7 @@ public sealed class SqlitePracticeVocabularyRepository(
             : question.Word;
     }
 
-    static VocabularyEntry ReadVocabulary(SqliteDataReader reader)
+    static VocabularyEntry ReadVocabulary(DbDataReader reader)
     {
         return new VocabularyEntry(
             reader.GetInt32(0),

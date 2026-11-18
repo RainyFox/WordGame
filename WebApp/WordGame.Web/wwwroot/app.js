@@ -3,6 +3,7 @@ const elements = {
   connectionText: document.querySelector("#connectionText"),
   vocabularyCount: document.querySelector("#vocabularyCount"),
   databaseName: document.querySelector("#databaseName"),
+  databaseSource: document.querySelector("#databaseSource"),
   todayPracticeSummary: document.querySelector("#todayPracticeSummary"),
   todayPracticeCount: document.querySelector("#todayPracticeCount"),
   setupView: document.querySelector("#setupView"),
@@ -47,6 +48,8 @@ const elements = {
 
 const state = {
   sessionId: null,
+  databaseSource: null,
+  databaseOptionsRequest: 0,
   mode: "FullRandom",
   direction: "JpToCn",
   readyForNext: false,
@@ -58,6 +61,7 @@ const state = {
 };
 
 const numberFormatter = new Intl.NumberFormat("zh-TW");
+const databaseLabels = { Local: "本機 SQLite", Turso: "雲端 Turso" };
 const percentFormatter = new Intl.NumberFormat("zh-TW", {
   style: "percent",
   maximumFractionDigits: 2
@@ -65,16 +69,45 @@ const percentFormatter = new Intl.NumberFormat("zh-TW", {
 
 async function initialize() {
   try {
-    const [health, options] = await Promise.all([
-      fetchJson("/api/health"),
-      fetchJson("/api/practice/options", { cache: "no-store" })
-    ]);
-    showConnectedState(health);
-    populatePracticeOptions(options);
+    const config = await fetchJson("/api/database/options", { cache: "no-store" });
+    const tursoOption = elements.databaseSource.querySelector('option[value="Turso"]');
+    tursoOption.disabled = !config.tursoConfigured;
+    if (tursoOption.disabled)
+      tursoOption.textContent += "（未設定）";
+    elements.databaseSource.disabled = false;
+    await selectDatabase(config.defaultSource);
   } catch (error) {
     showConnectionError(error);
   }
-  await refreshDailySummary();
+}
+
+async function selectDatabase(source) {
+  const requestId = ++state.databaseOptionsRequest;
+  state.databaseSource = source;
+  elements.databaseSource.value = source;
+  elements.startButton.disabled = true;
+  elements.connectionBadge.className = "connection-badge connection-badge--loading";
+  elements.connectionText.textContent = `正在連接${databaseLabels[source]}`;
+  elements.databaseName.textContent = databaseLabels[source];
+  elements.vocabularyCount.textContent = "—";
+  elements.todayPracticeCount.textContent = "—";
+  state.dailySummaryRequest++;
+  hideSetupError();
+
+  try {
+    const [health, options] = await Promise.all([
+      fetchJson("/api/health", { cache: "no-store" }),
+      fetchJson("/api/practice/options", { cache: "no-store" })
+    ]);
+    if (requestId !== state.databaseOptionsRequest)
+      return;
+    showConnectedState(health);
+    populatePracticeOptions(options);
+    await refreshDailySummary();
+  } catch (error) {
+    if (requestId === state.databaseOptionsRequest)
+      showConnectionError(error);
+  }
 }
 
 function getTodayRange() {
@@ -85,6 +118,9 @@ function getTodayRange() {
 }
 
 async function refreshDailySummary() {
+  if (!state.databaseSource)
+    return;
+
   const requestId = ++state.dailySummaryRequest;
   const range = getTodayRange();
   const query = new URLSearchParams(range);
@@ -110,6 +146,7 @@ async function fetchJson(url, options = {}) {
     headers: {
       Accept: "application/json",
       ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(state.databaseSource ? { "X-WordGame-Database": state.databaseSource } : {}),
       ...options.headers
     }
   });
@@ -124,9 +161,8 @@ async function fetchJson(url, options = {}) {
 
 function showConnectedState(health) {
   elements.connectionBadge.className = "connection-badge connection-badge--ok";
-  elements.connectionText.textContent = "資料庫連線正常";
+  elements.connectionText.textContent = `${databaseLabels[state.databaseSource]}已連線`;
   elements.vocabularyCount.textContent = numberFormatter.format(health.vocabularyCount);
-  elements.databaseName.textContent = getFileName(health.databasePath);
 }
 
 function showConnectionError(error) {
@@ -144,6 +180,8 @@ function populatePracticeOptions(options) {
   elements.maxNumber.max = options.maxNumber;
 
   const typeOptions = options.types.map(createTypeOption);
+  elements.vocabularyType.length = 1;
+  elements.vocabularyType.value = "";
   elements.vocabularyType.append(...typeOptions);
   elements.startButton.disabled = options.maxNumber === 0;
 
@@ -160,12 +198,10 @@ function createTypeOption(type) {
   return option;
 }
 
-function getFileName(path) {
-  return path.split(/[\\/]/).pop() || "WordGame.db";
-}
-
 async function startPractice(event) {
   event.preventDefault();
+  if (elements.startButton.disabled)
+    return;
   hideSetupError();
 
   const request = readPracticeSettings();
@@ -173,6 +209,7 @@ async function startPractice(event) {
     return;
 
   setButtonBusy(elements.startButton, true, "正在準備題目……");
+  elements.databaseSource.disabled = true;
   try {
     const response = await fetchJson("/api/practice/sessions", {
       method: "POST",
@@ -188,6 +225,7 @@ async function startPractice(event) {
     showSetupError(error.message);
   } finally {
     setButtonBusy(elements.startButton, false);
+    elements.databaseSource.disabled = false;
   }
 }
 
@@ -590,13 +628,14 @@ function abandonSessionOnPageHide() {
     return;
 
   state.sessionId = null;
-  fetch(`/api/practice/sessions/${sessionId}`, {
+  fetchJson(`/api/practice/sessions/${sessionId}`, {
     method: "DELETE",
     keepalive: true
   }).catch(() => null);
 }
 
 elements.setupForm.addEventListener("submit", startPractice);
+elements.databaseSource.addEventListener("change", () => selectDatabase(elements.databaseSource.value));
 elements.answerForm.addEventListener("submit", submitAnswer);
 elements.answerInput.addEventListener("compositionstart", () => {
   state.composingAnswer = true;

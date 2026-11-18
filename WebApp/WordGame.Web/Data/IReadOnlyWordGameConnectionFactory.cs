@@ -1,8 +1,8 @@
-using Microsoft.Data.Sqlite;
+using System.Data.Common;
 
 namespace WordGame.Web.Data;
 
 public interface IReadOnlyWordGameConnectionFactory
 {
-    Task<SqliteConnection> OpenAsync(CancellationToken cancellationToken);
+    Task<DbConnection> OpenAsync(CancellationToken cancellationToken);
 }

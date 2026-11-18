@@ -24,6 +24,7 @@ if /I not "%~1"=="--no-browser" (
 )
 
 echo Starting WordGame Web at %WORDGAME_WEB_URL%
+if not defined DOTNET_ENVIRONMENT if not defined ASPNETCORE_ENVIRONMENT set "DOTNET_ENVIRONMENT=Development"
 dotnet run --project "WebApp\WordGame.Web\WordGame.Web.csproj" --no-launch-profile --no-restore
 
 if errorlevel 1 (

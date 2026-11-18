@@ -21,7 +21,8 @@ internal static class WordGameWebApplicationFactory
             {
                 configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:Path"] = databasePath
+                    ["Database:Path"] = databasePath,
+                    ["Database:UseTurso"] = "false"
                 });
             });
             builder.ConfigureServices(services =>

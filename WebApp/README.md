@@ -5,12 +5,14 @@ It is kept outside `Assets` so Unity does not import or compile the web project.
 
 ## Database boundary
 
-- Read vocabulary from `../WordGame.db`.
+- Read vocabulary and store practice progress in the same database. The default
+  is `../WordGame.db`. Turso can be selected in the Web backend configuration.
 - Do not modify the `Vocabulary` table from the practice application.
 - Update `UserProgress` and append completed answers to `PracticeHistory` while
   practicing. The history table and its timestamp index are created automatically
   with the first completed answer.
-- Do not run the Unity practice scene and the web practice server at the same time.
+- When using local SQLite, do not run the Unity practice scene and the web
+  practice server at the same time.
 
 ## Planned structure
 
@@ -25,7 +27,7 @@ It is kept outside `Assets` so Unity does not import or compile the web project.
 Phase 5 provides an ASP.NET Core practice application that:
 
 - binds to `http://127.0.0.1:5276`;
-- resolves the project-root `WordGame.db`;
+- uses the project-root `WordGame.db` or the configured Turso database;
 - reports database health through `/api/health`;
 - reports vocabulary count and types through `/api/vocabulary/summary`;
 - filters practice words by actual `番号` range and `タイプ`;
@@ -115,6 +117,28 @@ Run the application manually:
 ```powershell
 dotnet run --project WebApp/WordGame.Web/WordGame.Web.csproj
 ```
+
+### Turso
+
+Choose Local SQLite or Turso in the database menu on the practice settings
+screen. Returning to settings ends the current practice session before switching.
+
+Set `Database:UseTurso` to `true` to default to Turso, `Database:TursoUrl` to the database URL, and
+`Database:TursoAuthToken` to a token with write access to that database. For
+local development, use the project's .NET User Secrets. For a hosted backend,
+set `Database__UseTurso`, `Database__TursoUrl`, and `Database__TursoAuthToken`
+as environment variables. `/api/health` reports the selected database location
+and vocabulary count.
+
+To default to local SQLite for one run, override the setting at startup:
+
+```powershell
+dotnet run --project WebApp/WordGame.Web/WordGame.Web.csproj -- --Database:UseTurso=false
+```
+
+Each practice session reads and saves progress in its selected database. If a
+Turso connection fails, choose Local SQLite in the settings menu to practice
+with the local database.
 
 Run all tests:
 

@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+using System.Data.Common;
 using WordGame.Web.Models;
 
 namespace WordGame.Web.Data;
@@ -18,7 +18,7 @@ public sealed class SqliteVocabularyReadRepository(
     public async Task<VocabularySummary> GetSummaryAsync(
         CancellationToken cancellationToken)
     {
-        await using SqliteConnection connection =
+        await using DbConnection connection =
             await connectionFactory.OpenAsync(cancellationToken);
 
         int count = await ReadVocabularyCountAsync(connection, cancellationToken);
@@ -29,22 +29,22 @@ public sealed class SqliteVocabularyReadRepository(
     }
 
     static async Task<int> ReadVocabularyCountAsync(
-        SqliteConnection connection,
+        DbConnection connection,
         CancellationToken cancellationToken)
     {
-        await using SqliteCommand command = connection.CreateCommand();
+        await using DbCommand command = connection.CreateCommand();
         command.CommandText = VocabularyCountSql;
         object? result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt32(result, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     static async Task<IReadOnlyList<string>> ReadVocabularyTypesAsync(
-        SqliteConnection connection,
+        DbConnection connection,
         CancellationToken cancellationToken)
     {
-        await using SqliteCommand command = connection.CreateCommand();
+        await using DbCommand command = connection.CreateCommand();
         command.CommandText = VocabularyTypesSql;
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+        await using DbDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 
         var types = new List<string>();
         while (await reader.ReadAsync(cancellationToken))

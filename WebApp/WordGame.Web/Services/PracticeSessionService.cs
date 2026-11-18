@@ -10,7 +10,8 @@ public sealed class PracticeSessionService(
     IUserProgressRepository progressRepository,
     IRandomSource randomSource,
     TimeProvider timeProvider,
-    IMemoryCache cache) : IPracticeSessionService
+    IMemoryCache cache,
+    WordGameDatabaseSelection databaseSelection) : IPracticeSessionService
 {
     static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(8);
 
@@ -28,7 +29,8 @@ public sealed class PracticeSessionService(
             fullRandomCandidates,
             randomSource);
         Guid sessionId = Guid.NewGuid();
-        cache.Set(sessionId, session, SessionLifetime);
+        var cacheKey = (sessionId, databaseSelection.Source);
+        cache.Set(cacheKey, session, SessionLifetime);
 
         try
         {
@@ -39,7 +41,7 @@ public sealed class PracticeSessionService(
         }
         catch
         {
-            cache.Remove(sessionId);
+            cache.Remove(cacheKey);
             throw;
         }
     }
@@ -98,7 +100,7 @@ public sealed class PracticeSessionService(
         PracticeSettlement? settlement = session.BeginAbandonmentSettlement();
         if (settlement is not null)
             await RecordSettlementAsync(session, settlement, cancellationToken);
-        cache.Remove(sessionId);
+        cache.Remove((sessionId, databaseSelection.Source));
     }
 
     public async Task<PracticeAnswerResponse> MarkAnswerWrongAsync(
@@ -252,7 +254,8 @@ public sealed class PracticeSessionService(
 
     bool TryGetSession(Guid sessionId, out PracticeSession? session)
     {
-        return cache.TryGetValue(sessionId, out session) && session is not null;
+        return cache.TryGetValue((sessionId, databaseSelection.Source), out session)
+            && session is not null;
     }
 
     static VocabularyFilter CreateFilter(StartPracticeRequest request)

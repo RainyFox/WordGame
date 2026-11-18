@@ -47,7 +47,7 @@
           </div>
           <div>
             <dt>資料來源</dt>
-            <dd id="databaseName">WordGame.db</dd>
+            <dd id="databaseName">—</dd>
           </div>
         </dl>
       </div>
@@ -60,6 +60,14 @@
           </div>
           <span class="progress-badge">PROGRESS ON</span>
         </div>
+
+        <label class="form-section">
+          <span class="field-label">資料庫</span>
+          <select id="databaseSource" name="databaseSource" disabled>
+            <option value="Turso">雲端 Turso</option>
+            <option value="Local">本機 SQLite</option>
+          </select>
+        </label>
 
         <fieldset class="form-section">
           <legend>番号範圍</legend>

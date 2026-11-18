@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.Data.Sqlite;
 
 namespace WordGame.Web.Data;
@@ -5,7 +6,7 @@ namespace WordGame.Web.Data;
 public sealed class SqliteReadOnlyWordGameConnectionFactory(
     IWordGameDatabasePathResolver pathResolver) : IReadOnlyWordGameConnectionFactory
 {
-    public async Task<SqliteConnection> OpenAsync(
+    public async Task<DbConnection> OpenAsync(
         CancellationToken cancellationToken)
     {
         string databasePath = pathResolver.GetDatabasePath();

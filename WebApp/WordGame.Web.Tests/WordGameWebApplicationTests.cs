@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using WordGame.Web.Models;
 using WordGame.Web.Services;
 using WordGame.Web.Tests.Support;
@@ -54,6 +55,48 @@ public sealed class WordGameWebApplicationTests
     }
 
     [Fact]
+    public async Task PracticeSession_RequiresTheDatabaseSourceItStartedWith()
+    {
+        using var database = new TemporaryWordGameDatabase();
+        await using WebApplicationFactory<Program> localFactory =
+            WordGameWebApplicationFactory.Create(database.DatabasePath);
+        await using WebApplicationFactory<Program> factory =
+            localFactory.WithWebHostBuilder(builder =>
+                builder.ConfigureAppConfiguration((_, configuration) =>
+                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Database:TursoUrl"] = "https://wordgame.invalid",
+                        ["Database:TursoAuthToken"] = "unused-test-token"
+                    })));
+        using HttpClient client = factory.CreateClient();
+        JsonElement options = await client.GetFromJsonAsync<JsonElement>("/api/database/options");
+        Assert.Equal("Local", options.GetProperty("defaultSource").GetString());
+        Assert.True(options.GetProperty("tursoConfigured").GetBoolean());
+
+        using HttpResponseMessage sessionResponse = await client.PostAsJsonAsync(
+            "/api/practice/sessions", new
+            {
+                minNumber = 1,
+                maxNumber = 1,
+                mode = "FullRandom",
+                direction = "JpToCn"
+            });
+        sessionResponse.EnsureSuccessStatusCode();
+        JsonElement session = await sessionResponse.Content.ReadFromJsonAsync<JsonElement>();
+        string revealUrl = $"/api/practice/sessions/{session.GetProperty("sessionId").GetGuid()}/reveal";
+
+        using var wrongDatabaseRequest = new HttpRequestMessage(HttpMethod.Post, revealUrl);
+        wrongDatabaseRequest.Headers.Add("X-WordGame-Database", "Turso");
+        using HttpResponseMessage wrongDatabaseResponse = await client.SendAsync(wrongDatabaseRequest);
+        Assert.Equal(HttpStatusCode.NotFound, wrongDatabaseResponse.StatusCode);
+
+        using var localDatabaseRequest = new HttpRequestMessage(HttpMethod.Post, revealUrl);
+        localDatabaseRequest.Headers.Add("X-WordGame-Database", "Local");
+        using HttpResponseMessage localDatabaseResponse = await client.SendAsync(localDatabaseRequest);
+        Assert.Equal(HttpStatusCode.OK, localDatabaseResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task IndexPage_IsServedByApplication()
     {
         using var database = new TemporaryWordGameDatabase();
@@ -68,6 +111,7 @@ public sealed class WordGameWebApplicationTests
         Assert.Contains("WordGame Web", html, StringComparison.Ordinal);
         Assert.Contains("PHASE 5 · DAILY PRACTICE", html, StringComparison.Ordinal);
         Assert.Contains("PROGRESS ON", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"databaseSource\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
